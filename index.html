@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pigeon Network</title>
-    <link rel="icon" type="image/x-icon" href="https://i.ibb.co/1G4MT5Fs/output-onlinepngtools-1.png">
+    <title>Pigeon Network Chatroom</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         /* Custom scrollbar styling for a cleaner look */
@@ -88,7 +87,7 @@
         </header>
         
         <div id="chat-container" class="space-y-4 p-4 mb-6 border border-slate-300 rounded-xl bg-slate-50 shadow-inner overflow-y-auto flex-grow">
-            <div class="text-center text-slate-500 italic p-10" id="initial-message">Fetching messages...</div>
+            <div class="text-center text-slate-500 italic p-10" id="initial-message">Sign in or continue as a guest to chat.</div>
         </div>
 
         <div id="message-section" class="flex space-x-3 hidden flex-shrink-0">
@@ -98,6 +97,7 @@
             </button>
         </div>
 
+        <!-- Status message now also handles temporary confirmation for deletion -->
         <div id="status-message" class="mt-4 text-sm text-center font-medium p-2 rounded-lg hidden flex-shrink-0"></div>
     </div>
 
@@ -138,6 +138,9 @@
         const REGISTERED_USERNAME_KEY = 'chat_registered_username';
         const MIN_USERNAME_LENGTH = 3;
         const MIN_PASSWORD_LENGTH = 6;
+        const ADMIN_USERNAME = 'Mikeywikey';
+        // Updated regex to allow letters, numbers, hyphens, and underscores
+        const ALPHANUMERIC_REGEX = /^[a-zA-Z0-9_-]+$/; 
         
         // !!! IMPORTANT: Replace this URL with your deployed Google Apps Script Web App URL !!!
         const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbytBm4VUqcE24mkcb-5mMTIcDMfqzBNqy33U8sct03Ajexr7pvBetQHneozpz4rqzp7dg/exec';
@@ -145,12 +148,13 @@
         let currentUsername = ''; // Holds the current user's display name
         let isGuest = false; // Tracks if the user is a guest
         let lastMessageCount = 0;
-        let pollingInterval = null;
+        let pollingInterval = null; 
         let isSigningUp = false; 
+        let currentConfirmAction = null; 
 
         // DOM Elements
         const currentUsernameDisplay = document.getElementById('current-username-display');
-        const authButton = document.getElementById('auth-button'); // Renamed
+        const authButton = document.getElementById('auth-button'); 
         const messageInput = document.getElementById('message-input');
         const sendButton = document.getElementById('send-button');
         const chatContainer = document.getElementById('chat-container');
@@ -169,32 +173,34 @@
         const modalActionButton = document.getElementById('modal-action-button');    
         const modalToggleLink = document.getElementById('modal-toggle-link');        
         const modalErrorMessage = document.getElementById('modal-error-message');
-        const guestContinueButton = document.getElementById('guest-continue-button'); // NEW
+        const guestContinueButton = document.getElementById('guest-continue-button'); 
 
         // --- Utility Functions ---
         
         function generateGuestId() {
             const num = Math.floor(100000 + Math.random() * 900000); // 6 random digits
-            return `Pigeon${num}`;
+            return `PigeonGuest${num}`;
         }
 
         // Displays error message in a red banner
         function displayError(msg) {
             console.error('Error:', msg);
-            statusMessage.textContent = msg;
+            statusMessage.innerHTML = msg;
             statusMessage.className = 'mt-4 text-sm text-center font-medium p-2 rounded-lg flex-shrink-0 text-red-700 bg-red-100 border border-red-300';
             statusMessage.classList.remove('hidden');
-            setTimeout(() => {
+            clearTimeout(currentConfirmAction);
+            currentConfirmAction = setTimeout(() => {
                 statusMessage.classList.add('hidden');
             }, 5000);
         }
         
         // Displays success message in a green banner
         function displayStatus(msg) {
-            statusMessage.textContent = msg;
+            statusMessage.innerHTML = msg;
             statusMessage.className = 'mt-4 text-sm text-center font-medium p-2 rounded-lg flex-shrink-0 text-green-700 bg-green-100 border border-green-300';
             statusMessage.classList.remove('hidden');
-            setTimeout(() => {
+            clearTimeout(currentConfirmAction);
+            currentConfirmAction = setTimeout(() => {
                 statusMessage.classList.add('hidden');
             }, 5000);
         }
@@ -207,17 +213,22 @@
                 xhr.onload = function() {
                     if (xhr.status >= 200 && xhr.status < 300) {
                         try {
-                            const json = JSON.parse(xhr.responseText);
+                            const responseText = xhr.responseText.trim();
+                            if (responseText === '') {
+                                reject(new Error('Empty server response.'));
+                                return;
+                            }
+                            const json = JSON.parse(responseText);
                             if (json.success) {
                                 resolve(json);
                             } else {
                                 reject(new Error(json.error || 'Server reported an unknown failure.'));
                             }
                         } catch (e) {
-                            reject(new Error('The server response was malformed.'));
+                            reject(new Error('The server response was malformed or not a JSON object.'));
                         }
                     } else {
-                        reject(new new Error(`HTTP Error ${xhr.status}: Failed to connect to server.`));
+                        reject(new Error(`HTTP Error ${xhr.status}: Failed to connect to server.`));
                     }
                 };
                 
@@ -234,6 +245,26 @@
                 }
             });
         }
+        
+        // --- Polling Management ---
+        
+        function stopChatPolling() {
+            if (pollingInterval) {
+                clearInterval(pollingInterval);
+                pollingInterval = null;
+            }
+        }
+        
+        function startChatPolling() {
+            stopChatPolling(); 
+            
+            // 1. Fetch messages immediately to load the correct, colorized state
+            fetchMessages(); 
+            
+            // 2. Start the regular polling interval
+            pollingInterval = setInterval(fetchMessages, CHAT_INTERVAL);
+        }
+
 
         // --- Modal Handlers ---
 
@@ -247,12 +278,10 @@
                 modalActionButton.classList.add('bg-pigeon-main', 'hover:bg-pigeon-dark');
                 modalToggleLink.textContent = 'Already have an account? Sign In.';
                 verifyPasswordGroup.classList.remove('hidden');
-                guestContinueButton.classList.add('hidden'); // Hide guest option during sign up/in process
+                guestContinueButton.classList.add('hidden'); 
                 
-                // Show length hints for sign up
-                modalUsernameInput.placeholder = `Username (${MIN_USERNAME_LENGTH}+ chars)`;
+                modalUsernameInput.placeholder = 'Username';
                 modalPasswordInput.placeholder = `Password (${MIN_PASSWORD_LENGTH}+ chars)`;
-                modalVerifyPasswordInput.placeholder = 'Retype Password';
             } else {
                 modalTitle.textContent = 'Sign In';
                 modalActionButton.textContent = 'Sign In';
@@ -260,29 +289,25 @@
                 modalActionButton.classList.add('bg-green-600', 'hover:bg-green-700');
                 modalToggleLink.textContent = 'Need an account? Sign Up.';
                 verifyPasswordGroup.classList.add('hidden');
-                guestContinueButton.classList.remove('hidden'); // Show guest option on main prompt
+                guestContinueButton.classList.remove('hidden'); 
                 
-                // Use generic placeholders for sign in
                 modalUsernameInput.placeholder = 'Username';
                 modalPasswordInput.placeholder = 'Password';
-                modalVerifyPasswordInput.placeholder = 'Retype Password';
             }
         }
 
         function showModal() {
             modalErrorMessage.classList.add('hidden'); 
             
-            // Populate username input if it was a registered user
             const registeredUser = localStorage.getItem(REGISTERED_USERNAME_KEY);
             modalUsernameInput.value = registeredUser || '';
             
             modalPasswordInput.value = '';
             modalVerifyPasswordInput.value = '';
             
-            // If currentUsername is empty, we force the welcome message
             modalTitle.textContent = currentUsername === '' ? 'Welcome!' : 'Sign In';
             
-            toggleModalState(false); // Always default to Sign In
+            toggleModalState(false); 
             
             usernameModal.classList.remove('hidden');
             setTimeout(() => {
@@ -304,7 +329,7 @@
         }
         
         function handleSuccessfulAuth(username, guest, message) {
-            currentUsername = username;
+            currentUsername = username; // This is now the case-preserved display name
             isGuest = guest;
             if (!isGuest) {
                 localStorage.setItem(REGISTERED_USERNAME_KEY, username);
@@ -312,6 +337,12 @@
             hideModal();
             updateUIForUsername();
             displayStatus(message);
+            
+            // CRITICAL FIX: Start polling (which includes an immediate fetch) only after username is set
+            console.log('--- AUTH STATE CHANGE DETECTED (Sign In/Up/Guest) ---');
+            console.log('New currentUsername registered:', currentUsername);
+            console.log('Starting chat polling to refresh chat ownership status (turn bubbles blue)...');
+            startChatPolling();
         }
 
         async function handleModalSave() {
@@ -326,7 +357,12 @@
                 return;
             }
 
-            // Client-side validation for Sign Up
+            if (!ALPHANUMERIC_REGEX.test(username)) {
+                modalErrorMessage.textContent = 'Username must contain only letters, numbers, hyphens (-), and underscores (_).';
+                modalErrorMessage.classList.remove('hidden');
+                return;
+            }
+
             if (isSigningUp) {
                 if (username.length < MIN_USERNAME_LENGTH) {
                     modalErrorMessage.textContent = `Username must be at least ${MIN_USERNAME_LENGTH} characters.`;
@@ -358,15 +394,13 @@
             try {
                 const response = await apiRequest('POST', formData);
                 
-                // Success
-                // When signing in or signing up, the user is no longer a guest.
-                handleSuccessfulAuth(username, false, response.message || 'Authentication successful!');
+                const displayUsername = response.displayUsername || username;
+                
+                handleSuccessfulAuth(displayUsername, false, response.message || 'Authentication successful!');
 
             } catch (error) {
-                // Failure: Display friendly error in modal
                 let userMessage = error.message;
 
-                // Strip the "Operation Error: " prefix from Apps Script for a cleaner display
                 if (userMessage.startsWith('Operation Error: ')) {
                     userMessage = userMessage.substring('Operation Error: '.length);
                 } else if (userMessage.includes('Connection failed') || userMessage.includes('HTTP Error')) {
@@ -375,7 +409,7 @@
                 
                 modalErrorMessage.textContent = userMessage;
                 modalErrorMessage.classList.remove('hidden');
-                modalPasswordInput.value = ''; // Clear passwords on failure
+                modalPasswordInput.value = ''; 
                 modalVerifyPasswordInput.value = '';
 
             } finally {
@@ -388,6 +422,7 @@
         
         function renderMessages(messages) {
             const isScrolledToBottom = chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight < 50;
+            const currentAdmin = currentUsername === ADMIN_USERNAME;
 
             if (messages.length === 0) {
                  initialMessage.textContent = 'The chat is currently empty. Be the first to send a message!';
@@ -398,21 +433,23 @@
                  return;
             }
             
-            if (messages.length === lastMessageCount) {
+            if (messages.length === lastMessageCount && lastMessageCount > 0) {
                 return;
             }
-
-            // Messages are not cleared on sign out, so we only clear when new messages are fetched
+            
             chatContainer.innerHTML = '';
             initialMessage.classList.add('hidden');
 
             messages.forEach(msg => {
-                // Use the user's current username for 'is mine' check
+                // The CRITICAL check for ownership
                 const isMine = msg.nickname === currentUsername; 
+                const canDelete = isMine || currentAdmin; 
+                
                 const messageElement = document.createElement('div');
                 
                 const alignmentClass = isMine ? 'chat-message-right' : 'chat-message-left';
-                const colorClass = isMine ? 'bg-pigeon-main text-white shadow-xl' : 'bg-white shadow-lg text-slate-800 border border-slate-100';
+                // White/Gray if not owned, Blue if owned
+                const colorClass = isMine ? 'bg-pigeon-main text-white shadow-xl' : 'bg-white shadow-lg text-slate-800 border border-slate-100'; 
                 const nicknameColor = isMine ? 'text-white/80' : 'text-pigeon-dark';
                 
                 const safeMessage = msg.message.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -424,7 +461,22 @@
                         <span class="font-bold text-sm ${nicknameColor}">${msg.nickname}</span>
                         <span class="text-xs ${isMine ? 'text-white/50' : 'text-slate-400'}">${msg.timestamp}</span>
                     </div>
-                    <div>${safeMessage}</div>
+                    
+                    <div class="flex items-start justify-between">
+                        <div class="whitespace-pre-wrap">${safeMessage}</div>
+                        ${canDelete ? `
+                            <button 
+                                data-id="${msg.id}" 
+                                class="delete-btn ml-3 flex-shrink-0 text-xs p-1 rounded-full hover:bg-red-600 transition duration-150 
+                                ${isMine ? 'text-white/80 hover:text-white' : 'text-red-400 hover:text-white bg-white/20 hover:bg-red-500'}"
+                                title="Delete message"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm6 0a1 1 0 112 0v6a1 1 0 11-2 0V8z" clip-rule="evenodd" />
+                                </svg>
+                            </button>
+                        ` : ''}
+                    </div>
                 `;
 
                 chatContainer.appendChild(messageElement);
@@ -438,7 +490,6 @@
         }
 
         async function fetchMessages() {
-            // Messages are always fetched immediately, regardless of auth state
             try {
                 const response = await apiRequest('GET');
                 renderMessages(response.data);
@@ -448,10 +499,55 @@
                 initialMessage.classList.remove('hidden');
             }
         }
+        
+        async function handleDeleteMessage(messageId) {
+            
+            const formData = new FormData();
+            formData.append('action', 'DELETE_MESSAGE'); 
+            formData.append('id', messageId);
+            formData.append('nickname', currentUsername); 
+
+            messageInput.disabled = true;
+            sendButton.disabled = true;
+
+            try {
+                const response = await apiRequest('POST', formData);
+                displayStatus(response.message || 'Message deleted.');
+                setTimeout(fetchMessages, 100); 
+            } catch (error) {
+                displayError('Failed to delete message: ' + error.message);
+            } finally {
+                messageInput.disabled = false;
+                sendButton.disabled = false;
+                updateUIForUsername(); 
+            }
+        }
+        
+        function showDeleteConfirmation(messageId) {
+            clearTimeout(currentConfirmAction);
+            statusMessage.innerHTML = `
+                <div class="flex items-center justify-center space-x-4">
+                    <span>Are you sure you want to delete this message?</span>
+                    <button id="confirm-delete-btn" data-id="${messageId}" class="px-3 py-1 bg-red-600 text-white rounded-md hover:bg-red-700 transition">Yes</button>
+                    <button id="cancel-delete-btn" class="px-3 py-1 bg-slate-400 text-white rounded-md hover:bg-slate-500 transition">No</button>
+                </div>
+            `;
+            statusMessage.className = 'mt-4 text-sm text-center font-medium p-2 rounded-lg flex-shrink-0 text-slate-800 bg-yellow-100 border border-yellow-300';
+            statusMessage.classList.remove('hidden');
+
+            document.getElementById('confirm-delete-btn').onclick = () => {
+                document.getElementById('confirm-delete-btn').disabled = true;
+                handleDeleteMessage(messageId);
+            };
+
+            document.getElementById('cancel-delete-btn').onclick = () => {
+                displayStatus('Deletion cancelled.');
+            };
+        }
+
 
         async function sendMessage() {
             const message = messageInput.value.trim();
-            // User can send if currentUsername is set (registered or guest)
             if (!message || !currentUsername) {  
                  displayError('Message content is required, and you must be signed in or a guest to send messages.');
                  return;
@@ -485,53 +581,63 @@
         }
         
         function updateUIForUsername() {
-            // isAuth is true if currentUsername is set (registered or guest)
             const isAuth = !!currentUsername; 
+            const isMikeywikey = currentUsername === ADMIN_USERNAME;
 
-            // Header UI update
             currentUsernameDisplay.textContent = isAuth 
-                ? (isGuest ? `Guest: ${currentUsername}` : `ID: ${currentUsername}`)
+                ? (isMikeywikey ? `ADMIN: ${currentUsername}` : (isGuest ? `Guest: ${currentUsername}` : `ID: ${currentUsername}`))
                 : '';
+            
+            if (isMikeywikey) {
+                currentUsernameDisplay.classList.remove('bg-slate-700');
+                currentUsernameDisplay.classList.add('bg-red-700', 'ring-2', 'ring-red-400');
+            } else {
+                 currentUsernameDisplay.classList.remove('bg-red-700', 'ring-2', 'ring-red-400');
+                 currentUsernameDisplay.classList.add('bg-slate-700');
+            }
+            
             currentUsernameDisplay.classList.toggle('hidden', !isAuth);
             
-            // Button text changes based on status
-            // If Guest or Not Logged In: "Sign In" (to prompt modal)
-            // If Registered: "Sign Out"
             authButton.textContent = isGuest || !isAuth ? 'Sign In' : 'Sign Out';
             
-            // Input/Chat UI update
-            // Only show chat input if authenticated (as registered or guest)
             messageSection.classList.toggle('hidden', !isAuth); 
             messageInput.disabled = !isAuth; 
             sendButton.disabled = !isAuth;
             sendButton.textContent = 'Send';
             
             if (isAuth) {
-                initialMessage.textContent = `Welcome to Pigeon Network, ${currentUsername}!`;
+                initialMessage.textContent = `Welcome to Pigeon Network, ${currentUsername}! Fetching messages...`;
             } else {
-                initialMessage.textContent = 'Sign in or continue as a guest to send messages.';
+                initialMessage.textContent = 'Sign in or continue as a guest to chat.';
                 initialMessage.classList.remove('hidden');
             }
         }
 
-        // --- Event Listeners ---
+        // --- Event Listeners and Initialization ---
         
         authButton.addEventListener('click', () => {
             if (currentUsername && !isGuest) {
                 // Sign Out logic (Registered User -> Unauthenticated State)
-                displayStatus("You have successfully signed out. Please sign in or continue as guest to chat.");
-                currentUsername = ''; // Clear ID
-                isGuest = true; // Default to true, will be set false on register
-                localStorage.removeItem(REGISTERED_USERNAME_KEY); // Remove registered flag
+                displayStatus("You have successfully signed out. Your messages are no longer highlighted.");
+                stopChatPolling(); // Stop polling immediately
+                
+                currentUsername = ''; 
+                isGuest = true; 
+                localStorage.removeItem(REGISTERED_USERNAME_KEY); 
                 updateUIForUsername();
-                showModal(); // Show modal after sign out
+                showModal(); 
+                
+                // CRITICAL FIX: Force message re-render using the now-empty currentUsername
+                console.log('--- SIGN OUT DETECTED ---');
+                console.log('New currentUsername registered: (cleared)');
+                console.log('Running fetchMessages() to remove chat ownership status (turn bubbles white)...');
+                fetchMessages(); 
             } else {
-                // Sign In / Register logic (Show modal for guests/unauthenticated)
+                // Sign In / Register logic
                 showModal();
             }
         });
         
-        // Handle "Continue as Guest" click from the modal
         guestContinueButton.addEventListener('click', () => {
             const guestUsername = generateGuestId();
             handleSuccessfulAuth(guestUsername, true, `You are now chatting as Guest: ${guestUsername}.`);
@@ -548,33 +654,48 @@
 
         modalActionButton.addEventListener('click', handleModalSave);
 
-        // Clear modal error when user starts typing again
+        // Clear error message on input change
         modalUsernameInput.addEventListener('input', () => { modalErrorMessage.classList.add('hidden'); });
         modalPasswordInput.addEventListener('input', () => { modalErrorMessage.classList.add('hidden'); });
         modalVerifyPasswordInput.addEventListener('input', () => { modalErrorMessage.classList.add('hidden'); });
 
-
+        // Add key listeners for better usability
         modalUsernameInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                modalPasswordInput.focus();
-            }
+            if (e.key === 'Enter') { modalPasswordInput.focus(); }
         });
 
         modalPasswordInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
-                if (isSigningUp) {
-                    modalVerifyPasswordInput.focus();
-                } else {
-                    handleModalSave();
-                }
+                if (isSigningUp) { modalVerifyPasswordInput.focus(); } else { handleModalSave(); }
             }
         });
 
         modalVerifyPasswordInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                handleModalSave();
-            }
+            if (e.key === 'Enter') { handleModalSave(); }
         });
+        
+        // Add listener to restrict characters in the input field while typing
+        modalUsernameInput.addEventListener('input', (e) => {
+             if (isSigningUp) {
+                const sanitizedValue = e.target.value.replace(/[^a-zA-Z0-9_-]/g, '');
+                if (e.target.value !== sanitizedValue) {
+                    e.target.value = sanitizedValue;
+                    modalErrorMessage.textContent = 'Only letters, numbers, hyphens (-), and underscores (_) are allowed.';
+                    modalErrorMessage.classList.remove('hidden');
+                    clearTimeout(e.target.errorTimeout);
+                    e.target.errorTimeout = setTimeout(() => {
+                        if (modalErrorMessage.textContent === 'Only letters, numbers, hyphens (-), and underscores (_) are allowed.') {
+                             modalErrorMessage.classList.add('hidden');
+                        }
+                    }, 3000);
+                } else {
+                     if (modalErrorMessage.textContent === 'Only letters, numbers, hyphens (-), and underscores (_) are allowed.') {
+                         modalErrorMessage.classList.add('hidden');
+                     }
+                }
+             }
+        });
+
 
         sendButton.addEventListener('click', sendMessage);
 
@@ -583,26 +704,33 @@
                 sendMessage();
             }
         });
+        
+        // Event Delegation for Delete Buttons
+        chatContainer.addEventListener('click', (event) => {
+            const deleteButton = event.target.closest('.delete-btn');
+            if (deleteButton) {
+                if (!currentUsername) {
+                    displayError("You must be signed in to delete messages.");
+                    return;
+                }
+                const messageId = parseInt(deleteButton.getAttribute('data-id'));
+                showDeleteConfirmation(messageId);
+            }
+        });
 
         document.addEventListener('DOMContentLoaded', () => {
-            // 1. Initial State Check (Registered User or Prompt Modal)
             const savedUsername = localStorage.getItem(REGISTERED_USERNAME_KEY);
+            
             if (savedUsername) {
-                // User was previously registered and skips the modal
-                currentUsername = savedUsername;
-                isGuest = false;
-                updateUIForUsername();
+                // If the user has a saved username, authenticate them automatically and start chat polling
+                handleSuccessfulAuth(savedUsername, false, `Welcome back, ${savedUsername}! Fetching messages...`);
             } else {
-                // User is not registered, force the modal to appear immediately.
-                currentUsername = ''; // Start unauthenticated
-                isGuest = true; // Temporary flag
+                // Otherwise, initialize UI and prompt for sign in/guest
+                currentUsername = ''; 
+                isGuest = true; 
                 updateUIForUsername(); 
                 showModal();
             }
-
-            // 2. Start Polling for Messages regardless of auth state to populate the chat area
-            fetchMessages();
-            pollingInterval = setInterval(fetchMessages, CHAT_INTERVAL);
         });
     </script>
 </body>
