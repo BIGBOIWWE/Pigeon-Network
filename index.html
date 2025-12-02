@@ -98,7 +98,6 @@
             </button>
         </div>
 
-        <!-- Status message now also handles temporary confirmation for deletion -->
         <div id="status-message" class="mt-4 text-sm text-center font-medium p-2 rounded-lg hidden flex-shrink-0"></div>
     </div>
 
@@ -468,13 +467,11 @@
                         ${canDelete ? `
                             <button 
                                 data-id="${msg.id}" 
-                                class="delete-btn ml-3 flex-shrink-0 text-xs p-1 rounded-full hover:bg-red-600 transition duration-150 
-                                ${isMine ? 'text-white/80 hover:text-white' : 'text-red-400 hover:text-white bg-white/20 hover:bg-red-500'}"
+                                class="delete-btn ml-3 flex-shrink-0 p-1 rounded-full transition duration-150 
+                                ${isMine ? 'hover:bg-red-600' : 'bg-white/20 hover:bg-red-500'}"
                                 title="Delete message"
                             >
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                                    <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm6 0a1 1 0 112 0v6a1 1 0 11-2 0V8z" clip-rule="evenodd" />
-                                </svg>
+                                <img src="delete-xxl.png" alt="Delete" class="w-4 h-4" />
                             </button>
                         ` : ''}
                     </div>
