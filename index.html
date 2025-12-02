@@ -28,13 +28,13 @@
             margin-right: auto;
             max-width: 80%;
             animation: fadeIn 0.3s ease-out;
-            transition: opacity 0.3s ease, height 0.3s ease, padding 0.3s ease;
+            transition: opacity 0.3s ease, height 0.3s ease, padding 0.3s ease, margin 0.3s ease;
         }
         .chat-message-right {
             margin-left: auto;
             max-width: 80%;
             animation: fadeIn 0.3s ease-out;
-            transition: opacity 0.3s ease, height 0.3s ease, padding 0.3s ease;
+            transition: opacity 0.3s ease, height 0.3s ease, padding 0.3s ease, margin 0.3s ease;
         }
 
         /* Fade-in animation for new messages */
@@ -427,72 +427,107 @@
         }
         
         // --- Chat Functions ---
-        
-        function renderMessages(messages) {
-            const isScrolledToBottom = chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight < 50;
-            const currentAdmin = currentUsername === ADMIN_USERNAME;
 
-            if (messages.length === 0) {
-                 initialMessage.textContent = 'The chat is currently empty. Be the first to send a message!';
-                 initialMessage.classList.remove('hidden');
-                 chatContainer.innerHTML = '';
-                 chatContainer.appendChild(initialMessage);
+        // Helper function to create a single message element (extracted for renderMessages update)
+        function createMessageElement(msg) {
+            const isMine = msg.nickname === currentUsername; 
+            const canDelete = isMine || currentUsername === ADMIN_USERNAME; 
+            
+            const messageElement = document.createElement('div');
+            
+            const alignmentClass = isMine ? 'chat-message-right' : 'chat-message-left';
+            const colorClass = isMine ? 'bg-pigeon-main text-white shadow-xl' : 'bg-white shadow-lg text-slate-800 border border-slate-100'; 
+            const nicknameColor = isMine ? 'text-white/80' : 'text-pigeon-dark';
+            
+            const safeMessage = msg.message.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            
+            messageElement.className = `flex flex-col p-3 rounded-xl ${alignmentClass} ${colorClass}`;
+            messageElement.setAttribute('data-message-id', msg.id); // Critical for diffing
+            
+            messageElement.innerHTML = `
+                <div class="flex items-baseline space-x-2 mb-1">
+                    <span class="font-bold text-sm ${nicknameColor}">${msg.nickname}</span>
+                    <span class="text-xs ${isMine ? 'text-white/50' : 'text-slate-400'}">${msg.timestamp}</span>
+                </div>
+                
+                <div class="flex items-start justify-between">
+                    <div class="whitespace-pre-wrap">${safeMessage}</div>
+                    ${canDelete ? `
+                        <button 
+                            data-id="${msg.id}" 
+                            class="delete-btn ml-3 flex-shrink-0 p-1 rounded-full transition duration-150 
+                            ${isMine ? 'hover:bg-red-600' : 'bg-white/20 hover:bg-red-500'}"
+                            title="Delete message"
+                        >
+                            <img src="delete-xxl.png" alt="Delete" class="w-4 h-4" />
+                        </button>
+                    ` : ''}
+                </div>
+            `;
+            return messageElement;
+        }
+
+        // Updated function to prevent screen flash by only patching the DOM
+        function renderMessages(newMessages) {
+            const isScrolledToBottom = chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight < 50;
+            
+            // 1. Handle empty state
+            if (newMessages.length === 0) {
+                 if (lastMessageCount > 0 || chatContainer.children.length > 1) { // Only clear if there were messages
+                    chatContainer.innerHTML = '';
+                    initialMessage.classList.remove('hidden');
+                    chatContainer.appendChild(initialMessage);
+                 }
                  lastMessageCount = 0;
                  return;
             }
-            
-            // Only update if message count changes to avoid unnecessary re-renders (except for first load)
-            if (messages.length === lastMessageCount && lastMessageCount > 0) {
-                return;
+
+            // Remove initial message if messages exist
+            if (initialMessage.parentNode) {
+                initialMessage.classList.add('hidden');
             }
-            
-            chatContainer.innerHTML = '';
-            initialMessage.classList.add('hidden');
 
-            messages.forEach(msg => {
-                // The CRITICAL check for ownership
-                const isMine = msg.nickname === currentUsername; 
-                const canDelete = isMine || currentAdmin; 
-                
-                const messageElement = document.createElement('div');
-                
-                const alignmentClass = isMine ? 'chat-message-right' : 'chat-message-left';
-                // White/Gray if not owned, Blue if owned
-                const colorClass = isMine ? 'bg-pigeon-main text-white shadow-xl' : 'bg-white shadow-lg text-slate-800 border border-slate-100'; 
-                const nicknameColor = isMine ? 'text-white/80' : 'text-pigeon-dark';
-                
-                const safeMessage = msg.message.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                
-                messageElement.className = `flex flex-col p-3 rounded-xl ${alignmentClass} ${colorClass}`;
-                messageElement.setAttribute('data-message-id', msg.id); // Add ID for deletion tracking
-                
-                messageElement.innerHTML = `
-                    <div class="flex items-baseline space-x-2 mb-1">
-                        <span class="font-bold text-sm ${nicknameColor}">${msg.nickname}</span>
-                        <span class="text-xs ${isMine ? 'text-white/50' : 'text-slate-400'}">${msg.timestamp}</span>
-                    </div>
-                    
-                    <div class="flex items-start justify-between">
-                        <div class="whitespace-pre-wrap">${safeMessage}</div>
-                        ${canDelete ? `
-                            <button 
-                                data-id="${msg.id}" 
-                                class="delete-btn ml-3 flex-shrink-0 p-1 rounded-full transition duration-150 
-                                ${isMine ? 'hover:bg-red-600' : 'bg-white/20 hover:bg-red-500'}"
-                                title="Delete message"
-                            >
-                                <img src="delete-xxl.png" alt="Delete" class="w-4 h-4" />
-                            </button>
-                        ` : ''}
-                    </div>
-                `;
+            // 2. Diffing Logic: Get existing messages and their IDs
+            const existingMessageElements = Array.from(chatContainer.querySelectorAll('[data-message-id]'));
+            const existingIds = new Set(existingMessageElements.map(el => el.getAttribute('data-message-id')));
+            const newMessageIds = new Set(newMessages.map(msg => String(msg.id)));
 
-                chatContainer.appendChild(messageElement);
+            let isNewMessageAdded = false;
+
+            // 3. Remove deleted messages (no longer in newMessages list)
+            existingMessageElements.forEach(el => {
+                const id = el.getAttribute('data-message-id');
+                if (!newMessageIds.has(id)) {
+                    // Use transition properties set in CSS to smoothly remove the element
+                    el.style.opacity = '0';
+                    el.style.height = '0';
+                    el.style.padding = '0';
+                    el.style.margin = '0';
+                    setTimeout(() => el.remove(), 300); 
+                }
             });
 
-            lastMessageCount = messages.length;
+            // 4. Add new messages (present in newMessages list but not in DOM)
+            newMessages.forEach(msg => {
+                const messageIdStr = String(msg.id);
+                if (!existingIds.has(messageIdStr)) {
+                    const messageElement = createMessageElement(msg);
+                    
+                    // Temporarily add a fade-in class for smooth appearance
+                    messageElement.style.opacity = '0';
+                    chatContainer.appendChild(messageElement);
+                    // Force reflow
+                    void messageElement.offsetHeight; 
+                    messageElement.style.opacity = '1';
 
-            if (isScrolledToBottom) {
+                    isNewMessageAdded = true;
+                }
+            });
+
+            // 5. Update message count and scroll position
+            lastMessageCount = newMessages.length;
+            
+            if (isNewMessageAdded || isScrolledToBottom) {
                 chatContainer.scrollTop = chatContainer.scrollHeight;
             }
         }
@@ -573,8 +608,10 @@
                 renderMessages(response.data);
             } catch (error) {
                 console.error('Pigeon Poll Failed:', error.message);
-                initialMessage.textContent = 'Error loading messages. Check server connection.';
-                initialMessage.classList.remove('hidden');
+                if (chatContainer.children.length === 0 || (chatContainer.children.length === 1 && chatContainer.contains(initialMessage))) {
+                    initialMessage.textContent = 'Error loading messages. Check server connection.';
+                    initialMessage.classList.remove('hidden');
+                }
             }
         }
         
@@ -585,7 +622,7 @@
             formData.append('id', messageId);
             formData.append('nickname', currentUsername); 
 
-            // 1. OPTIMISTIC UPDATE: Visually remove element from DOM immediately
+            // 1. OPTIMISTIC UPDATE: Visually remove element from DOM immediately with smooth transition
             messageElement.style.opacity = '0'; 
             messageElement.style.height = '0';
             messageElement.style.paddingTop = '0';
@@ -602,7 +639,7 @@
                 // 2. Await server response
                 const response = await apiRequest('POST', formData);
                 
-                // 3. SUCCESS: Display status, but DO NOT call fetchMessages()
+                // 3. SUCCESS: Display status. The next regular poll will confirm removal to other users.
                 displayStatus(response.message || 'Message deleted.');
                 
             } catch (error) {
@@ -651,6 +688,7 @@
             }
 
             // 1. OPTIMISTIC UPDATE: Display message immediately & clear input
+            removeTempMessage(); // Ensure no previous temp message is hanging around
             renderTempMessage(message);
             const originalMessage = messageInput.value;
             messageInput.value = '';
@@ -666,7 +704,7 @@
             try {
                 await apiRequest('POST', formData);
                 
-                // 3. SUCCESS: Remove temp message and DO NOT force full server refresh
+                // 3. SUCCESS: Remove temp message. The next poll will replace it with the confirmed message.
                 removeTempMessage();
                 displayStatus('Message sent successfully!');
                 
