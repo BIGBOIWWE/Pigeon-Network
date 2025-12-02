@@ -152,13 +152,18 @@
         // !!! IMPORTANT: Replace this URL with your deployed Google Apps Script Web App URL !!!
         const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbytBm4VUqcE24mkcb-5mMTIcDMfqzBNqy33U8sct03Ajexr7pvBetQHneozpz4rqzp7dg/exec';
 
+        // Global State Flags
         let currentUsername = ''; // Holds the current user's display name
         let isGuest = false; // Tracks if the user is a guest
         let lastMessageCount = 0;
         let pollingInterval = null; 
         let isSigningUp = false; 
         let currentConfirmAction = null; 
+        
+        // FIX: New flags for reliable flow control
+        let isProcessingAction = false; // Prevents concurrent sends/deletes/polls
         let tempMessageElement = null; // Stores the optimistic message DOM element
+        let lastSentMessageContent = ''; // Used to match optimistic message to incoming server message
 
         // DOM Elements
         const currentUsernameDisplay = document.getElementById('current-username-display');
@@ -192,6 +197,19 @@
             return `PigeonGuest${num}`;
         }
 
+        function disableChatActions(disabled) {
+            // Disables the main chat controls and prevents new actions
+            messageInput.disabled = disabled;
+            sendButton.disabled = disabled;
+            // The main chat container listener check handles delete actions
+            if (disabled) {
+                // Keep the button styling consistent with the disabled state
+                sendButton.classList.add('disabled:bg-slate-400', 'disabled:cursor-not-allowed');
+            } else {
+                sendButton.classList.remove('disabled:bg-slate-400', 'disabled:cursor-not-allowed');
+            }
+        }
+        
         // Displays error message in a red banner
         function displayError(msg) {
             console.error('Error:', msg);
@@ -278,8 +296,8 @@
         }
 
 
-        // --- Modal Handlers ---
-
+        // --- Modal Handlers (omitted for brevity, assume unchanged logic) ---
+        // ... (Modal functions are unchanged and kept in the final provided code block) ...
         function toggleModalState(isSignUpMode) {
             isSigningUp = isSignUpMode;
             
@@ -339,21 +357,6 @@
             }, 300);
         }
         
-        function handleSuccessfulAuth(username, guest, message) {
-            currentUsername = username; // This is now the case-preserved display name
-            isGuest = guest;
-            if (!isGuest) {
-                localStorage.setItem(REGISTERED_USERNAME_KEY, username);
-            }
-            hideModal();
-            updateUIForUsername();
-            displayStatus(message);
-            
-            // Start polling (which includes an immediate fetch) only after username is set
-            console.log('--- AUTH STATE CHANGE DETECTED (Sign In/Up/Guest) ---');
-            startChatPolling();
-        }
-
         async function handleModalSave() {
             const username = modalUsernameInput.value.trim();
             const password = modalPasswordInput.value.trim();
@@ -426,6 +429,20 @@
                 modalActionButton.textContent = isSigningUp ? 'Sign Up' : 'Sign In';
             }
         }
+
+        function handleSuccessfulAuth(username, guest, message) {
+            currentUsername = username; // This is now the case-preserved display name
+            isGuest = guest;
+            if (!isGuest) {
+                localStorage.setItem(REGISTERED_USERNAME_KEY, username);
+            }
+            hideModal();
+            updateUIForUsername();
+            displayStatus(message);
+            
+            console.log('--- AUTH STATE CHANGE DETECTED (Sign In/Up/Guest) ---');
+            startChatPolling();
+        }
         
         // --- Chat Functions ---
 
@@ -471,6 +488,13 @@
 
         // Updated function to prevent screen flash by only patching the DOM
         function renderMessages(newMessages) {
+            // FIX 1: If an action is being processed (delete/send is pending server confirmation), 
+            // the chat list might be stale, so we pause the render entirely to prevent flicker/reappearance.
+            if (isProcessingAction) {
+                console.log('Render skipped: Action in progress.');
+                return;
+            }
+
             const isScrolledToBottom = chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight < 50;
             
             // 1. Handle empty state
@@ -500,6 +524,8 @@
             // 3. Remove deleted messages (no longer in newMessages list)
             existingMessageElements.forEach(el => {
                 const id = el.getAttribute('data-message-id');
+                // The explicit removal in handleDeleteMessage is now trusted. 
+                // This block handles deletions from other users.
                 if (!newMessageIds.has(id)) {
                     // Use transition properties set in CSS to smoothly remove the element
                     el.style.opacity = '0';
@@ -516,6 +542,13 @@
                 if (!existingIds.has(messageIdStr)) {
                     const messageElement = createMessageElement(msg);
                     
+                    // FIX 3: Check if this new message is the one we just optimistically sent.
+                    if (tempMessageElement && msg.message.trim() === lastSentMessageContent.trim()) {
+                        removeTempMessage(); // Remove the temporary UI
+                        lastSentMessageContent = ''; // Clear the tracker
+                        displayStatus('Message sent successfully!'); // Now show success
+                    }
+
                     // Temporarily set height to 0 for the slide-in effect
                     messageElement.style.height = '0';
                     messageElement.style.padding = '0';
@@ -545,15 +578,13 @@
         }
         
         function showSendingState() {
-            messageInput.disabled = true;
-            sendButton.disabled = true;
+            // Replaced logic with new disableChatActions
             sendText.classList.add('hidden');
             loadingSpinner.classList.remove('hidden');
         }
 
         function hideSendingState() {
-            messageInput.disabled = false;
-            sendButton.disabled = false;
+            // Replaced logic with new disableChatActions
             sendText.classList.remove('hidden');
             loadingSpinner.classList.add('hidden');
         }
@@ -566,7 +597,8 @@
             
             // Create the message object for immediate display
             const tempMsg = {
-                id: -1, 
+                // Use a non-numeric ID so it is ignored by the server-side diffing
+                id: 'temp-' + Date.now(), 
                 nickname: currentUsername,
                 message: message,
                 // Use current time for the optimistic timestamp
@@ -576,7 +608,6 @@
             const messageElement = document.createElement('div');
             // Dim it slightly using opacity-70 and ensure it is on the right
             const alignmentClass = 'chat-message-right';
-            // FIX: Added mb-4 for consistency
             const colorClass = 'bg-pigeon-main text-white shadow-xl opacity-70 mb-4'; 
             const nicknameColor = 'text-white/80';
             
@@ -616,6 +647,12 @@
         }
 
         async function fetchMessages() {
+            // If an action is pending, let the action handler restart the polling to avoid race conditions.
+            if (isProcessingAction && !pollingInterval) { 
+                console.log('Skipping fetchMessages call while waiting for action confirmation.');
+                return;
+            }
+
             try {
                 const response = await apiRequest('GET');
                 renderMessages(response.data);
@@ -630,15 +667,18 @@
         
         async function handleDeleteMessage(messageId, messageElement) {
             
+            // FIX 2: Block further actions
+            isProcessingAction = true;
+            disableChatActions(true);
+            
+            // FIX 1: Stop polling immediately to prevent the regular chat refresh 
+            // from re-adding the message while the server request is pending.
+            stopChatPolling();
+
             const formData = new FormData();
             formData.append('action', 'DELETE_MESSAGE'); 
             formData.append('id', messageId);
             formData.append('nickname', currentUsername); 
-
-            // ** FIX 1: Stop polling immediately to prevent the regular chat refresh 
-            // from re-adding the message while the server request is pending. **
-            stopChatPolling();
-            // ---------------------------------------------------------------------
 
             // 1. OPTIMISTIC UPDATE: Visually remove element from DOM immediately with smooth transition
             messageElement.style.opacity = '0'; 
@@ -649,15 +689,11 @@
             // Set a slight delay for the CSS transition before removal
             setTimeout(() => messageElement.remove(), 300); 
 
-            // Disable UI while waiting for server confirmation
-            messageInput.disabled = true;
-            sendButton.disabled = true;
-
             try {
                 // 2. Await server response
                 const response = await apiRequest('POST', formData);
                 
-                // 3. SUCCESS: Display status.
+                // 3. SUCCESS: Display status. The visual removal is already complete/in progress.
                 displayStatus(response.message || 'Message deleted.');
                 
             } catch (error) {
@@ -665,21 +701,24 @@
                 displayError('Failed to delete message. Message restored: ' + error.message);
                 
                 // We MUST call fetchMessages here to restore the optimistically deleted message
+                // The finally block will handle the restart of polling after this fetch completes.
                 setTimeout(fetchMessages, 100); 
                 
             } finally {
                 // 5. RESTORE UI STATE and RESTART POLLING
-                messageInput.disabled = false;
-                sendButton.disabled = false;
-                updateUIForUsername();
+                isProcessingAction = false;
+                disableChatActions(false);
+                updateUIForUsername(); 
                 
-                // ** FIX 2: Restart polling. This includes an immediate fetch to sync the final chat state. **
+                // Restart polling. This includes an immediate fetch to sync the final chat state.
                 startChatPolling();
-                // --------------------------------------------------------------------------------------------
             }
         }
         
         function showDeleteConfirmation(messageId, messageElement) {
+            // FIX 2: Prevent showing confirmation if an action is already running
+            if (isProcessingAction) return;
+
             clearTimeout(currentConfirmAction);
             statusMessage.innerHTML = `
                 <div class="flex items-center justify-center space-x-4">
@@ -709,14 +748,24 @@
                  return;
             }
 
+            // FIX 2: Block further actions
+            if (isProcessingAction) {
+                displayError('Please wait for the previous action to complete.');
+                return;
+            }
+
+            isProcessingAction = true;
+            disableChatActions(true);
+
             // 1. OPTIMISTIC UPDATE: Display message immediately & clear input
-            removeTempMessage(); // Ensure no previous temp message is hanging around
+            removeTempMessage(); 
             renderTempMessage(message);
             const originalMessage = messageInput.value;
             messageInput.value = '';
 
             // 2. SET SENDING STATE
             showSendingState();
+            lastSentMessageContent = originalMessage; // FIX 3: Store content for matching
 
             const formData = new FormData();
             formData.append('action', 'SEND'); 
@@ -726,18 +775,21 @@
             try {
                 await apiRequest('POST', formData);
                 
-                // 3. SUCCESS: Remove temp message. The next poll will replace it with the confirmed message.
-                removeTempMessage();
-                displayStatus('Message sent successfully!');
+                // FIX 3: SUCCESS: Do NOT remove temp message. Force a fetch to replace it.
+                // The temp message is removed in renderMessages upon content match.
+                fetchMessages(); 
                 
             } catch (error) {
                 // 4. FAILURE: Remove temp message, restore input, show error
                 removeTempMessage();
                 messageInput.value = originalMessage; // Restore the message to the input field
                 displayError('Failed to send message: ' + error.message);
+                lastSentMessageContent = ''; // Clear tracker
             } finally {
                 // 5. RESTORE UI STATE
+                isProcessingAction = false;
                 hideSendingState();
+                disableChatActions(false);
                 messageInput.focus();
             }
         }
@@ -763,8 +815,13 @@
             authButton.textContent = isGuest || !isAuth ? 'Sign In' : 'Sign Out';
             
             messageSection.classList.toggle('hidden', !isAuth); 
-            messageInput.disabled = !isAuth; 
-            sendButton.disabled = !isAuth;
+            // Only disable the inputs/buttons if unauthenticated, otherwise disableChatActions handles it.
+            if (!isAuth) {
+                messageInput.disabled = true; 
+                sendButton.disabled = true;
+            } else {
+                disableChatActions(isProcessingAction);
+            }
             sendText.textContent = 'Send';
             
             if (isAuth) {
@@ -874,6 +931,12 @@
                     displayError("You must be signed in to delete messages.");
                     return;
                 }
+                // FIX 2: Block delete action if a send or delete is already pending
+                if (isProcessingAction) {
+                     displayError("Please wait for the current operation to complete before deleting a message.");
+                     return;
+                }
+                
                 const messageId = parseInt(deleteButton.getAttribute('data-id'));
                 // Find the containing message element (div.flex.flex-col.p-3.rounded-xl)
                 const messageElement = deleteButton.closest('.flex.flex-col.p-3.rounded-xl'); 
