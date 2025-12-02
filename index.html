@@ -28,11 +28,13 @@
             margin-right: auto;
             max-width: 80%;
             animation: fadeIn 0.3s ease-out;
+            transition: opacity 0.3s ease, height 0.3s ease, padding 0.3s ease;
         }
         .chat-message-right {
             margin-left: auto;
             max-width: 80%;
             animation: fadeIn 0.3s ease-out;
+            transition: opacity 0.3s ease, height 0.3s ease, padding 0.3s ease;
         }
 
         /* Fade-in animation for new messages */
@@ -94,7 +96,11 @@
         <div id="message-section" class="flex space-x-3 hidden flex-shrink-0">
             <input type="text" id="message-input" placeholder="Type your message..." class="flex-grow p-3 border border-slate-300 rounded-lg focus:ring-pigeon-main focus:border-pigeon-main transition duration-150 shadow-md disabled:bg-slate-50">
             <button id="send-button" class="w-[6rem] inline-flex items-center justify-center py-3 bg-pigeon-main text-white font-bold rounded-lg hover:bg-pigeon-dark transition duration-150 shadow-lg disabled:bg-slate-400 disabled:cursor-not-allowed">
-                Send
+                <span id="send-text">Send</span>
+                <svg id="loading-spinner" class="animate-spin h-5 w-5 text-white hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
             </button>
         </div>
 
@@ -151,12 +157,15 @@
         let pollingInterval = null; 
         let isSigningUp = false; 
         let currentConfirmAction = null; 
+        let tempMessageElement = null; // Stores the optimistic message DOM element
 
         // DOM Elements
         const currentUsernameDisplay = document.getElementById('current-username-display');
         const authButton = document.getElementById('auth-button'); 
         const messageInput = document.getElementById('message-input');
         const sendButton = document.getElementById('send-button');
+        const sendText = document.getElementById('send-text');
+        const loadingSpinner = document.getElementById('loading-spinner');
         const chatContainer = document.getElementById('chat-container');
         const messageSection = document.getElementById('message-section');
         const initialMessage = document.getElementById('initial-message');
@@ -433,6 +442,7 @@
                  return;
             }
             
+            // Only update if message count changes to avoid unnecessary re-renders (except for first load)
             if (messages.length === lastMessageCount && lastMessageCount > 0) {
                 return;
             }
@@ -486,6 +496,76 @@
                 chatContainer.scrollTop = chatContainer.scrollHeight;
             }
         }
+        
+        function showSendingState() {
+            messageInput.disabled = true;
+            sendButton.disabled = true;
+            sendText.classList.add('hidden');
+            loadingSpinner.classList.remove('hidden');
+        }
+
+        function hideSendingState() {
+            messageInput.disabled = false;
+            sendButton.disabled = false;
+            sendText.classList.remove('hidden');
+            loadingSpinner.classList.add('hidden');
+        }
+
+        function renderTempMessage(message) {
+            // Check if a temporary message already exists (prevent duplicates on fast clicks)
+            if (tempMessageElement) {
+                tempMessageElement.remove();
+            }
+            
+            // Create the message object for immediate display
+            const tempMsg = {
+                id: -1, 
+                nickname: currentUsername,
+                message: message,
+                // Use current time for the optimistic timestamp
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            };
+
+            const messageElement = document.createElement('div');
+            // Dim it slightly using opacity-70 and ensure it is on the right
+            const alignmentClass = 'chat-message-right';
+            const colorClass = 'bg-pigeon-main text-white shadow-xl opacity-70'; 
+            const nicknameColor = 'text-white/80';
+            
+            const safeMessage = tempMsg.message.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            
+            messageElement.className = `flex flex-col p-3 rounded-xl ${alignmentClass} ${colorClass}`;
+            messageElement.setAttribute('data-temp', 'true'); 
+            
+            messageElement.innerHTML = `
+                <div class="flex items-baseline space-x-2 mb-1">
+                    <span class="font-bold text-sm ${nicknameColor}">${tempMsg.nickname}</span>
+                    <span class="text-xs ${nicknameColor} flex items-center space-x-1">
+                        <svg class="animate-spin h-3 w-3 mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span>Sending...</span>
+                    </span>
+                </div>
+                
+                <div class="flex items-start justify-between">
+                    <div class="whitespace-pre-wrap">${safeMessage}</div>
+                </div>
+            `;
+
+            chatContainer.appendChild(messageElement);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            
+            tempMessageElement = messageElement;
+        }
+
+        function removeTempMessage() {
+            if (tempMessageElement) {
+                tempMessageElement.remove();
+                tempMessageElement = null;
+            }
+        }
 
         async function fetchMessages() {
             try {
@@ -498,30 +578,47 @@
             }
         }
         
-        async function handleDeleteMessage(messageId) {
+        async function handleDeleteMessage(messageId, messageElement) {
             
             const formData = new FormData();
             formData.append('action', 'DELETE_MESSAGE'); 
             formData.append('id', messageId);
             formData.append('nickname', currentUsername); 
 
+            // 1. OPTIMISTIC UPDATE: Visually remove element from DOM immediately
+            messageElement.style.opacity = '0'; 
+            messageElement.style.height = '0';
+            messageElement.style.paddingTop = '0';
+            messageElement.style.paddingBottom = '0';
+            // Set a slight delay for the CSS transition before removal
+            setTimeout(() => messageElement.remove(), 300); 
+
+            // Disable UI while waiting for server confirmation
             messageInput.disabled = true;
             sendButton.disabled = true;
 
             try {
                 const response = await apiRequest('POST', formData);
+                
+                // 2. SUCCESS: Force full server refresh (reload)
                 displayStatus(response.message || 'Message deleted.');
+                
+                // The delay ensures the optimistic removal animation completes before server refresh
                 setTimeout(fetchMessages, 100); 
             } catch (error) {
-                displayError('Failed to delete message: ' + error.message);
+                // 3. FAILURE: Force full server refresh to restore the message
+                displayError('Failed to delete message. Message restored: ' + error.message);
+                setTimeout(fetchMessages, 100); 
+                
             } finally {
+                // 4. RESTORE UI STATE
                 messageInput.disabled = false;
                 sendButton.disabled = false;
                 updateUIForUsername(); 
             }
         }
         
-        function showDeleteConfirmation(messageId) {
+        function showDeleteConfirmation(messageId, messageElement) {
             clearTimeout(currentConfirmAction);
             statusMessage.innerHTML = `
                 <div class="flex items-center justify-center space-x-4">
@@ -535,7 +632,7 @@
 
             document.getElementById('confirm-delete-btn').onclick = () => {
                 document.getElementById('confirm-delete-btn').disabled = true;
-                handleDeleteMessage(messageId);
+                handleDeleteMessage(messageId, messageElement);
             };
 
             document.getElementById('cancel-delete-btn').onclick = () => {
@@ -551,30 +648,37 @@
                  return;
             }
 
-            messageInput.disabled = true;
-            sendButton.disabled = true;
-            sendButton.textContent = 'Sending...';
+            // 1. OPTIMISTIC UPDATE: Display message immediately & clear input
+            renderTempMessage(message);
+            const originalMessage = messageInput.value;
+            messageInput.value = '';
+
+            // 2. SET SENDING STATE
+            showSendingState();
 
             const formData = new FormData();
             formData.append('action', 'SEND'); 
             formData.append('nickname', currentUsername);
-            formData.append('message', message);
+            formData.append('message', originalMessage); // Use the original message for the API call
 
             try {
                 await apiRequest('POST', formData);
                 
-                messageInput.value = '';
-                messageInput.disabled = false;
-                sendButton.disabled = false;
-                sendButton.textContent = 'Send';
-                messageInput.focus();
+                // 3. SUCCESS: Remove temp message and force full server refresh (reload)
+                removeTempMessage();
+                displayStatus('Message sent successfully!');
                 
-                setTimeout(fetchMessages, 200); 
+                // Use a slight delay to ensure the temp message is removed before the new one is fetched
+                setTimeout(fetchMessages, 100); 
             } catch (error) {
+                // 4. FAILURE: Remove temp message, restore input, show error
+                removeTempMessage();
+                messageInput.value = originalMessage; // Restore the message to the input field
                 displayError('Failed to send message: ' + error.message);
-                messageInput.disabled = false;
-                sendButton.disabled = false;
-                sendButton.textContent = 'Send';
+            } finally {
+                // 5. RESTORE UI STATE
+                hideSendingState();
+                messageInput.focus();
             }
         }
         
@@ -601,7 +705,7 @@
             messageSection.classList.toggle('hidden', !isAuth); 
             messageInput.disabled = !isAuth; 
             sendButton.disabled = !isAuth;
-            sendButton.textContent = 'Send';
+            sendText.textContent = 'Send';
             
             if (isAuth) {
                 initialMessage.textContent = `Welcome to Pigeon Network, ${currentUsername}! Fetching messages...`;
@@ -609,6 +713,8 @@
                 initialMessage.textContent = 'Sign in or continue as a guest to chat.';
                 initialMessage.classList.remove('hidden');
             }
+            
+            hideSendingState(); // Ensure spinner is hidden on UI update
         }
 
         // --- Event Listeners and Initialization ---
@@ -712,7 +818,9 @@
                     return;
                 }
                 const messageId = parseInt(deleteButton.getAttribute('data-id'));
-                showDeleteConfirmation(messageId);
+                // Find the containing message element (div.flex.flex-col.p-3.rounded-xl)
+                const messageElement = deleteButton.closest('.flex.flex-col.p-3.rounded-xl'); 
+                showDeleteConfirmation(messageId, messageElement); // Pass the element
             }
         });
 
