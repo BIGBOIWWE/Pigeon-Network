@@ -465,6 +465,7 @@
                 const safeMessage = msg.message.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
                 
                 messageElement.className = `flex flex-col p-3 rounded-xl ${alignmentClass} ${colorClass}`;
+                messageElement.setAttribute('data-message-id', msg.id); // Add ID for deletion tracking
                 
                 messageElement.innerHTML = `
                     <div class="flex items-baseline space-x-2 mb-1">
@@ -590,6 +591,7 @@
             messageElement.style.height = '0';
             messageElement.style.paddingTop = '0';
             messageElement.style.paddingBottom = '0';
+            messageElement.style.margin = '0';
             // Set a slight delay for the CSS transition before removal
             setTimeout(() => messageElement.remove(), 300); 
 
@@ -598,20 +600,21 @@
             sendButton.disabled = true;
 
             try {
+                // 2. Await server response
                 const response = await apiRequest('POST', formData);
                 
-                // 2. SUCCESS: Force full server refresh (reload)
+                // 3. SUCCESS: Display status, but DO NOT call fetchMessages()
                 displayStatus(response.message || 'Message deleted.');
                 
-                // The delay ensures the optimistic removal animation completes before server refresh
-                setTimeout(fetchMessages, 100); 
             } catch (error) {
-                // 3. FAILURE: Force full server refresh to restore the message
+                // 4. FAILURE: Show error and force full server refresh to restore the message
                 displayError('Failed to delete message. Message restored: ' + error.message);
+                
+                // We MUST call fetchMessages here to restore the optimistically deleted message
                 setTimeout(fetchMessages, 100); 
                 
             } finally {
-                // 4. RESTORE UI STATE
+                // 5. RESTORE UI STATE
                 messageInput.disabled = false;
                 sendButton.disabled = false;
                 updateUIForUsername(); 
@@ -632,7 +635,7 @@
 
             document.getElementById('confirm-delete-btn').onclick = () => {
                 document.getElementById('confirm-delete-btn').disabled = true;
-                handleDeleteMessage(messageId, messageElement);
+                handleDeleteMessage(messageId, messageElement); // Pass the element
             };
 
             document.getElementById('cancel-delete-btn').onclick = () => {
@@ -664,12 +667,10 @@
             try {
                 await apiRequest('POST', formData);
                 
-                // 3. SUCCESS: Remove temp message and force full server refresh (reload)
+                // 3. SUCCESS: Remove temp message and DO NOT force full server refresh
                 removeTempMessage();
                 displayStatus('Message sent successfully!');
                 
-                // Use a slight delay to ensure the temp message is removed before the new one is fetched
-                setTimeout(fetchMessages, 100); 
             } catch (error) {
                 // 4. FAILURE: Remove temp message, restore input, show error
                 removeTempMessage();
