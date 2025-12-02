@@ -262,6 +262,7 @@
             if (pollingInterval) {
                 clearInterval(pollingInterval);
                 pollingInterval = null;
+                console.log('Chat polling stopped.');
             }
         }
         
@@ -273,6 +274,7 @@
             
             // 2. Start the regular polling interval
             pollingInterval = setInterval(fetchMessages, CHAT_INTERVAL);
+            console.log('Chat polling started/restarted.');
         }
 
 
@@ -347,10 +349,8 @@
             updateUIForUsername();
             displayStatus(message);
             
-            // CRITICAL FIX: Start polling (which includes an immediate fetch) only after username is set
+            // Start polling (which includes an immediate fetch) only after username is set
             console.log('--- AUTH STATE CHANGE DETECTED (Sign In/Up/Guest) ---');
-            console.log('New currentUsername registered:', currentUsername);
-            console.log('Starting chat polling to refresh chat ownership status (turn bubbles blue)...');
             startChatPolling();
         }
 
@@ -635,8 +635,12 @@
             formData.append('id', messageId);
             formData.append('nickname', currentUsername); 
 
+            // ** FIX 1: Stop polling immediately to prevent the regular chat refresh 
+            // from re-adding the message while the server request is pending. **
+            stopChatPolling();
+            // ---------------------------------------------------------------------
+
             // 1. OPTIMISTIC UPDATE: Visually remove element from DOM immediately with smooth transition
-            // FIX: Explicitly set all collapsing properties to 0 for a smooth slide up (opacity, height, padding, and margin-bottom)
             messageElement.style.opacity = '0'; 
             messageElement.style.height = '0';
             messageElement.style.padding = '0';
@@ -653,7 +657,7 @@
                 // 2. Await server response
                 const response = await apiRequest('POST', formData);
                 
-                // 3. SUCCESS: Display status. The next regular poll will confirm removal to other users.
+                // 3. SUCCESS: Display status.
                 displayStatus(response.message || 'Message deleted.');
                 
             } catch (error) {
@@ -664,10 +668,14 @@
                 setTimeout(fetchMessages, 100); 
                 
             } finally {
-                // 5. RESTORE UI STATE
+                // 5. RESTORE UI STATE and RESTART POLLING
                 messageInput.disabled = false;
                 sendButton.disabled = false;
-                updateUIForUsername(); 
+                updateUIForUsername();
+                
+                // ** FIX 2: Restart polling. This includes an immediate fetch to sync the final chat state. **
+                startChatPolling();
+                // --------------------------------------------------------------------------------------------
             }
         }
         
@@ -783,10 +791,7 @@
                 updateUIForUsername();
                 showModal(); 
                 
-                // CRITICAL FIX: Force message re-render using the now-empty currentUsername
-                console.log('--- SIGN OUT DETECTED ---');
-                console.log('New currentUsername registered: (cleared)');
-                console.log('Running fetchMessages() to remove chat ownership status (turn bubbles white)...');
+                // Force message re-render using the now-empty currentUsername
                 fetchMessages(); 
             } else {
                 // Sign In / Register logic
