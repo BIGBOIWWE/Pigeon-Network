@@ -24,17 +24,18 @@
         }
         
         /* Message bubble styling */
+        .chat-message-left, .chat-message-right {
+            max-width: 80%;
+            /* Added marginBottom to transition properties for smooth collapse */
+            transition: opacity 0.3s ease, height 0.3s ease, padding 0.3s ease, margin-bottom 0.3s ease; 
+            animation: fadeIn 0.3s ease-out;
+        }
+        
         .chat-message-left {
             margin-right: auto;
-            max-width: 80%;
-            animation: fadeIn 0.3s ease-out;
-            transition: opacity 0.3s ease, height 0.3s ease, padding 0.3s ease, margin 0.3s ease;
         }
         .chat-message-right {
             margin-left: auto;
-            max-width: 80%;
-            animation: fadeIn 0.3s ease-out;
-            transition: opacity 0.3s ease, height 0.3s ease, padding 0.3s ease, margin 0.3s ease;
         }
 
         /* Fade-in animation for new messages */
@@ -89,7 +90,7 @@
             </div>
         </header>
         
-        <div id="chat-container" class="space-y-4 p-4 mb-6 border border-slate-300 rounded-xl bg-slate-50 shadow-inner overflow-y-auto flex-grow">
+        <div id="chat-container" class="p-4 mb-6 border border-slate-300 rounded-xl bg-slate-50 shadow-inner overflow-y-auto flex-grow">
             <div class="text-center text-slate-500 italic p-10" id="initial-message">Sign in or continue as a guest to chat.</div>
         </div>
 
@@ -441,7 +442,8 @@
             
             const safeMessage = msg.message.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
             
-            messageElement.className = `flex flex-col p-3 rounded-xl ${alignmentClass} ${colorClass}`;
+            // FIX: Added mb-4 class to control spacing directly on the message bubble
+            messageElement.className = `flex flex-col p-3 rounded-xl mb-4 ${alignmentClass} ${colorClass}`;
             messageElement.setAttribute('data-message-id', msg.id); // Critical for diffing
             
             messageElement.innerHTML = `
@@ -475,6 +477,7 @@
             if (newMessages.length === 0) {
                  if (lastMessageCount > 0 || chatContainer.children.length > 1) { // Only clear if there were messages
                     chatContainer.innerHTML = '';
+                    initialMessage.textContent = 'The chat is currently empty. Be the first to send a message!';
                     initialMessage.classList.remove('hidden');
                     chatContainer.appendChild(initialMessage);
                  }
@@ -483,7 +486,7 @@
             }
 
             // Remove initial message if messages exist
-            if (initialMessage.parentNode) {
+            if (initialMessage.parentNode && !initialMessage.classList.contains('hidden')) {
                 initialMessage.classList.add('hidden');
             }
 
@@ -502,7 +505,7 @@
                     el.style.opacity = '0';
                     el.style.height = '0';
                     el.style.padding = '0';
-                    el.style.margin = '0';
+                    el.style.marginBottom = '0'; // Explicitly collapse the margin
                     setTimeout(() => el.remove(), 300); 
                 }
             });
@@ -513,11 +516,20 @@
                 if (!existingIds.has(messageIdStr)) {
                     const messageElement = createMessageElement(msg);
                     
-                    // Temporarily add a fade-in class for smooth appearance
+                    // Temporarily set height to 0 for the slide-in effect
+                    messageElement.style.height = '0';
+                    messageElement.style.padding = '0';
+                    messageElement.style.marginBottom = '0';
                     messageElement.style.opacity = '0';
+                    
                     chatContainer.appendChild(messageElement);
-                    // Force reflow
+                    
+                    // Force reflow and then trigger transition
                     void messageElement.offsetHeight; 
+
+                    messageElement.style.height = ''; // Let CSS determine height
+                    messageElement.style.padding = ''; // Let CSS determine padding
+                    messageElement.style.marginBottom = ''; // Let CSS determine margin
                     messageElement.style.opacity = '1';
 
                     isNewMessageAdded = true;
@@ -564,7 +576,8 @@
             const messageElement = document.createElement('div');
             // Dim it slightly using opacity-70 and ensure it is on the right
             const alignmentClass = 'chat-message-right';
-            const colorClass = 'bg-pigeon-main text-white shadow-xl opacity-70'; 
+            // FIX: Added mb-4 for consistency
+            const colorClass = 'bg-pigeon-main text-white shadow-xl opacity-70 mb-4'; 
             const nicknameColor = 'text-white/80';
             
             const safeMessage = tempMsg.message.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -623,11 +636,12 @@
             formData.append('nickname', currentUsername); 
 
             // 1. OPTIMISTIC UPDATE: Visually remove element from DOM immediately with smooth transition
+            // FIX: Explicitly set all collapsing properties to 0 for a smooth slide up (opacity, height, padding, and margin-bottom)
             messageElement.style.opacity = '0'; 
             messageElement.style.height = '0';
-            messageElement.style.paddingTop = '0';
-            messageElement.style.paddingBottom = '0';
-            messageElement.style.margin = '0';
+            messageElement.style.padding = '0';
+            messageElement.style.marginBottom = '0'; 
+            
             // Set a slight delay for the CSS transition before removal
             setTimeout(() => messageElement.remove(), 300); 
 
