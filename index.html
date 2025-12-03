@@ -56,10 +56,10 @@
             background: linear-gradient(135deg, #1e293b 0%, #334155 50%, #475569 100%);
         }
         
-        /* Custom style for reaction selection bar (UPDATED) */
+        /* Custom style for reaction selection bar */
         .reaction-selector {
-            position: fixed; /* Changed to fixed to allow positioning relative to the viewport/screen */
-            z-index: 50; /* Ensure it is on top of everything */
+            position: fixed; /* Fixed position for accurate screen coordinates */
+            z-index: 50; 
         }
     </style>
     <script>
@@ -117,12 +117,12 @@
     
     <div id="reaction-selector" class="reaction-selector bg-white p-2 rounded-full shadow-2xl border-4 border-pigeon-light hidden">
         <div class="flex space-x-2">
-            <button data-reaction="heart" class="reaction-btn p-1 rounded-full hover:bg-slate-100 transition duration-100" title="Love"><img src="heart.png" alt="Love" class="w-6 h-6"/></button>
-            <button data-reaction="bad" class="reaction-btn p-1 rounded-full hover:bg-slate-100 transition duration-100" title="Dislike"><img src="bad.png" alt="Dislike" class="w-6 h-6"/></button>
-            <button data-reaction="cry" class="reaction-btn p-1 rounded-full hover:bg-slate-100 transition duration-100" title="Sad"><img src="cry.png" alt="Sad" class="w-6 h-6"/></button>
-            <button data-reaction="flip" class="reaction-btn p-1 rounded-full hover:bg-slate-100 transition duration-100" title="Flip Table"><img src="flip.png" alt="Angry" class="w-6 h-6"/></button>
+            <button data-reaction="heart" class="reaction-btn p-1 rounded-full hover:bg-slate-100 transition duration-100" title="Love"><img src="heart.png" alt="Love" class="w-8 h-8"/></button>
+            <button data-reaction="bad" class="reaction-btn p-1 rounded-full hover:bg-slate-100 transition duration-100" title="Dislike"><img src="bad.png" alt="Dislike" class="w-8 h-8"/></button>
+            <button data-reaction="cry" class="reaction-btn p-1 rounded-full hover:bg-slate-100 transition duration-100" title="Sad"><img src="cry.png" alt="Sad" class="w-8 h-8"/></button>
+            <button data-reaction="flip" class="reaction-btn p-1 rounded-full hover:bg-slate-100 transition duration-100" title="Flip Table"><img src="flip.png" alt="Angry" class="w-8 h-8"/></button>
             <button data-reaction="clear" class="reaction-btn p-1 rounded-full text-slate-500 hover:text-red-500 transition duration-100" title="Clear Reaction">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
             </button>
@@ -215,7 +215,7 @@
         const modalErrorMessage = document.getElementById('modal-error-message');
         const guestContinueButton = document.getElementById('guest-continue-button'); 
 
-        // --- Utility Functions (unchanged) ---
+        // --- Utility Functions (updated for less status messages) ---
         
         function generateGuestId() {
             const num = Math.floor(100000 + Math.random() * 900000); 
@@ -460,7 +460,7 @@
             startChatPolling();
         }
         
-        // --- Reaction Handlers (UPDATED POSITIONING & OPTIMISTIC UI) ---
+        // --- Reaction Handlers (UPDATED LOGIC) ---
         
         function showReactionSelector(messageElement, messageId) {
             if (!currentUsername) return; 
@@ -468,8 +468,7 @@
             // Check if user is the message owner
             const messageOwner = messageElement.getAttribute('data-nickname');
             if (messageOwner === currentUsername) {
-                // REMOVED: displayError("You cannot react to your own messages.");
-                return;
+                return; // User cannot react to their own message
             }
 
             currentMessageForReaction = messageElement;
@@ -504,49 +503,72 @@
             reactionSelector.classList.add('hidden');
             currentMessageForReaction = null;
         }
-
-        // NEW: Function to update the reaction count client-side optimistically
-        function optimisticallyAddReaction(messageElement, reactionName) {
-            if (reactionName === 'clear') {
-                // Cannot reliably perform optimistic 'clear' without knowing the user's previous reaction. 
-                // We rely on the server fetch for this one.
-                return; 
-            }
-            
+        
+        // Function to update the reaction count client-side optimistically
+        function optimisticallyUpdateReactions(messageElement, newReaction, oldReaction) {
             const isMine = messageElement.getAttribute('data-nickname') === currentUsername; 
             const positionClass = isMine ? 'bottom-[-15px] left-2' : 'bottom-[-15px] right-2';
             const reactionImageMap = { 'heart': 'heart.png', 'bad': 'bad.png', 'cry': 'cry.png', 'flip': 'flip.png' };
 
-            let displayContainer = messageElement.querySelector('.reactions-display');
-            if (!displayContainer) {
-                // Create the container if it doesn't exist
-                displayContainer = document.createElement('div');
-                displayContainer.className = `reactions-display absolute ${positionClass} flex items-center bg-white border border-slate-200 rounded-full shadow-md px-1 py-0.5 text-xs font-semibold`;
-                messageElement.appendChild(displayContainer);
+            // Helper function to update the count of a specific reaction
+            const updateReactionCount = (reactionName, change) => {
+                let displayContainer = messageElement.querySelector('.reactions-display');
+                if (!displayContainer && change <= 0) return; // Nothing to remove
+
+                let reactionItem = displayContainer ? displayContainer.querySelector(`[data-reaction-name="${reactionName}"]`) : null;
+
+                if (reactionItem) {
+                    const countSpan = reactionItem.querySelector('span');
+                    let currentCount = parseInt(countSpan.textContent) || 0;
+                    const newCount = currentCount + change;
+
+                    if (newCount <= 0) {
+                        // Remove the reaction item if count drops to zero or below
+                        reactionItem.remove();
+                        
+                        // If the display container is now empty, remove it too
+                        if (displayContainer.children.length === 0) {
+                            displayContainer.remove();
+                            // If the container is removed, we must ensure we don't try to reuse the old reference.
+                            displayContainer = null; 
+                        }
+                    } else {
+                        countSpan.textContent = newCount;
+                    }
+                } else if (change > 0) {
+                    // Create new reaction item (only if adding)
+                    if (!displayContainer) {
+                        displayContainer = document.createElement('div');
+                        displayContainer.className = `reactions-display absolute ${positionClass} flex items-center bg-white border border-slate-200 rounded-full shadow-md px-1 py-0.5 text-xs font-semibold`;
+                        messageElement.appendChild(displayContainer);
+                    }
+                    
+                    reactionItem = document.createElement('div');
+                    reactionItem.className = 'reaction-item flex items-center ml-1';
+                    reactionItem.setAttribute('data-reaction-name', reactionName);
+                    reactionItem.innerHTML = `
+                        <img src="${reactionImageMap[reactionName]}" alt="${reactionName}" class="w-4 h-4"/>
+                        <span class="ml-0.5 text-slate-700">${change}</span>
+                    `;
+                    displayContainer.appendChild(reactionItem);
+                }
+            };
+            
+            // 1. Decrement the old reaction count (if one exists)
+            if (oldReaction) { 
+                updateReactionCount(oldReaction, -1);
+            }
+
+            // 2. Increment the new reaction count (if one exists)
+            if (newReaction) { 
+                updateReactionCount(newReaction, 1);
             }
             
-            // Find the existing item for this reaction
-            let reactionItem = displayContainer.querySelector(`[data-reaction-name="${reactionName}"]`);
-            
-            if (reactionItem) {
-                // Increment existing reaction
-                const countSpan = reactionItem.querySelector('span');
-                const currentCount = parseInt(countSpan.textContent) + 1;
-                countSpan.textContent = currentCount;
-            } else {
-                // Create new reaction item
-                reactionItem = document.createElement('div');
-                reactionItem.className = 'reaction-item flex items-center ml-1';
-                reactionItem.setAttribute('data-reaction-name', reactionName);
-                reactionItem.innerHTML = `
-                    <img src="${reactionImageMap[reactionName]}" alt="${reactionName}" class="w-3.5 h-3.5"/>
-                    <span class="ml-0.5 text-slate-700">1</span>
-                `;
-                displayContainer.appendChild(reactionItem);
-            }
+            // 3. Update the tracking attribute on the message element
+            messageElement.setAttribute('data-current-user-reaction', newReaction);
         }
 
-        async function handleReaction(reactionName) {
+        async function handleReaction(clickedReaction) {
             const messageId = reactionSelector.getAttribute('data-message-id');
             const messageElement = currentMessageForReaction; // Store the element before hiding the menu
             hideReactionSelector(); // Close the selector immediately
@@ -555,29 +577,46 @@
                 return;
             }
 
+            // 1. Determine the OLD state
+            const oldReaction = messageElement.getAttribute('data-current-user-reaction') || '';
+
+            // 2. Determine the intended NEW state and the SERVER parameter
+            let newReaction = ''; // The new reaction state on the client ('heart', 'bad', or '')
+            let serverReaction = ''; // The reaction name to send to the server ('heart', 'bad', or 'clear')
+
+            if (clickedReaction === 'clear' || clickedReaction === oldReaction) {
+                // Case 1: Clear button clicked OR Toggle Off (clicking existing reaction)
+                newReaction = ''; 
+                serverReaction = 'clear'; 
+            } else {
+                // Case 2: Add new reaction OR Replace old reaction
+                newReaction = clickedReaction;
+                serverReaction = clickedReaction;
+            }
+
+            if (!oldReaction && newReaction === '') {
+                // Edge Case: Clicking 'clear' when there's no reaction. NO-OP.
+                return;
+            }
+
+            // 3. Perform the optimistic DOM update BEFORE the API call
+            optimisticallyUpdateReactions(messageElement, newReaction, oldReaction);
+            
             isProcessingAction = true;
             disableChatActions(true);
             stopChatPolling(); 
-            
-            // --- OPTIMISTIC UPDATE: Show the reaction immediately
-            optimisticallyAddReaction(messageElement, reactionName);
 
             const formData = new FormData();
             formData.append('action', 'REACT_MESSAGE'); 
             formData.append('id', messageId);
             formData.append('nickname', currentUsername);
-            formData.append('reaction', reactionName); 
+            formData.append('reaction', serverReaction); // Send the determined server parameter
 
             try {
                 await apiRequest('POST', formData);
-                
-                // Success: Force a fetch to confirm the state and replace the optimistic element
-                fetchMessages(); 
-                
+                fetchMessages(); // Success: Force a fetch to confirm the state
             } catch (error) {
-                // Failure: Force a fetch to revert the optimistic change.
-                fetchMessages(); 
-                
+                fetchMessages(); // Failure: Force a fetch to revert the optimistic change.
             } finally {
                 isProcessingAction = false;
                 disableChatActions(false);
@@ -585,7 +624,7 @@
             }
         }
         
-        // --- Chat Functions (updated createMessageElement for reaction rendering) ---
+        // --- Chat Functions (updated createMessageElement for user reaction state) ---
 
         function createMessageElement(msg) {
             const isMine = msg.nickname === currentUsername; 
@@ -602,6 +641,11 @@
             messageElement.className = `flex flex-col p-3 rounded-xl mb-4 ${alignmentClass} ${colorClass} group`; 
             messageElement.setAttribute('data-message-id', msg.id); 
             messageElement.setAttribute('data-nickname', msg.nickname); 
+            
+            // NOTE: Since the server does not send the user's specific reaction, 
+            // we initialize this to empty on render. It is then tracked client-side.
+            // If the message is replaced/updated by a server poll, this is reset.
+            messageElement.setAttribute('data-current-user-reaction', ''); 
             
             let reactions = {};
             if (msg.reactions) {
@@ -624,7 +668,7 @@
                 reactionKeys.forEach(reaction => {
                     reactionsHtml += `
                         <div class="reaction-item flex items-center ml-1" data-reaction-name="${reaction}">
-                            <img src="${reaction}.png" alt="${reaction}" class="w-3.5 h-3.5"/>
+                            <img src="${reaction}.png" alt="${reaction}" class="w-4 h-4"/>
                             <span class="ml-0.5 text-slate-700">${reactions[reaction]}</span>
                         </div>
                     `;
@@ -689,19 +733,27 @@
             newMessages.forEach(msg => {
                 const messageIdStr = String(msg.id);
                 const existingEl = existingMessageElements.find(el => el.getAttribute('data-message-id') === messageIdStr);
+                
+                // Get the current user's reaction state before replacement, so it's not lost
+                let currentUserReactionState = existingEl ? existingEl.getAttribute('data-current-user-reaction') : '';
 
                 if (existingEl) {
                     if (tempMessageElement && msg.message.trim() === lastSentMessageContent.trim()) {
                         removeTempMessage();
                         lastSentMessageContent = '';
-                        displayStatus('Message sent successfully!');
+                        // Removed: displayStatus('Message sent successfully!');
                     }
                     
                     const updatedEl = createMessageElement(msg);
                     
                     if (existingEl.innerHTML !== updatedEl.innerHTML) {
                         const isAtBottom = chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight < 50;
+                        
+                        // Preserve the client-side reaction state on the new element
+                        updatedEl.setAttribute('data-current-user-reaction', currentUserReactionState);
+
                         existingEl.replaceWith(updatedEl);
+                        
                         if (isAtBottom) {
                             chatContainer.scrollTop = chatContainer.scrollHeight;
                         }
@@ -845,8 +897,8 @@
             setTimeout(() => messageElement.remove(), 300); 
 
             try {
-                const response = await apiRequest('POST', formData);
-                displayStatus(response.message || 'Message deleted.');
+                await apiRequest('POST', formData);
+                // Removed: displayStatus(response.message || 'Message deleted.');
             } catch (error) {
                 displayError('Failed to delete message. Message restored: ' + error.message);
                 setTimeout(fetchMessages, 100); 
@@ -1065,7 +1117,7 @@
         
         // --- Reaction Event Listeners ---
 
-        // NEW: Listener to hide the reaction selector when the chat container is scrolled
+        // Listener to hide the reaction selector when the chat container is scrolled
         chatContainer.addEventListener('scroll', hideReactionSelector);
         
         // 1. Long Press / Touch Start Listener
@@ -1095,8 +1147,7 @@
                 // Start the timer for long-press
                 reactionTimer = setTimeout(() => {
                     if (messageElement.hasAttribute('data-temp')) {
-                         // Removed error display for cleaner UI
-                         return;
+                         return; // Cannot react to temp message
                     }
                     showReactionSelector(messageElement, messageId);
                 }, LONG_PRESS_DURATION);
