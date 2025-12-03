@@ -29,8 +29,7 @@
             /* Added marginBottom to transition properties for smooth collapse */
             transition: opacity 0.3s ease, height 0.3s ease, padding 0.3s ease, margin-bottom 0.3s ease; 
             animation: fadeIn 0.3s ease-out;
-            /* Crucial: Ensure position: relative for reaction popover/display */
-            position: relative; 
+            position: relative; /* CRITICAL: Allows absolute positioning of reactions relative to the bubble */
         }
         
         .chat-message-left {
@@ -59,11 +58,8 @@
         
         /* Custom style for reaction selection bar (UPDATED) */
         .reaction-selector {
-            position: absolute;
-            /* Vertical position is now controlled entirely by JavaScript for precision */
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 10;
+            position: fixed; /* Changed to fixed to allow positioning relative to the viewport/screen */
+            z-index: 50; /* Ensure it is on top of everything */
         }
     </style>
     <script>
@@ -464,46 +460,44 @@
             startChatPolling();
         }
         
-        // --- Reaction Handlers (UPDATED POSITIONING) ---
+        // --- Reaction Handlers (UPDATED POSITIONING & OPTIMISTIC UI) ---
         
         function showReactionSelector(messageElement, messageId) {
             if (!currentUsername) return; 
             
-            // Get chat container's position relative to the viewport
-            const containerRect = chatContainer.getBoundingClientRect();
-            
-            // Get message element's position relative to the viewport
-            const rect = messageElement.getBoundingClientRect();
-
             // Check if user is the message owner
             const messageOwner = messageElement.getAttribute('data-nickname');
             if (messageOwner === currentUsername) {
-                displayError("You cannot react to your own messages.");
+                // REMOVED: displayError("You cannot react to your own messages.");
                 return;
             }
 
             currentMessageForReaction = messageElement;
             
-            // 1. Horizontal: Center of the message bubble
-            const selectorLeft = rect.left + rect.width / 2;
-            
-            // 2. Vertical: Directly under the message bubble.
-            // rect.bottom gives the viewport y-coordinate of the bottom edge of the message.
-            const messageBottom = rect.bottom; 
-            
-            // Calculate position relative to the chat container's scroll view
-            // (messageBottom - containerRect.top) gives the position of the bottom of the bubble 
-            // relative to the top of the container's visible area.
-            // Adding chatContainer.scrollTop accounts for how much the container has scrolled.
-            const positionTop = (messageBottom - containerRect.top + chatContainer.scrollTop) + 10; // +10 for a small gap
+            // Get message element's position relative to the viewport
+            const rect = messageElement.getBoundingClientRect();
 
-            // Set the absolute position
-            reactionSelector.style.left = (selectorLeft - containerRect.left) + 'px';
-            reactionSelector.style.top = positionTop + 'px'; 
-            
-            // Set the message ID on the selector for easy access in the click handler
+            // Set the message ID on the selector
             reactionSelector.setAttribute('data-message-id', messageId);
             reactionSelector.classList.remove('hidden');
+
+            // Use setTimeout(0) to ensure the element's offsetWidth is correctly calculated 
+            // after its `hidden` class is removed, allowing for proper centering.
+            setTimeout(() => {
+                const selectorWidth = reactionSelector.offsetWidth;
+                
+                // Horizontal: Center of the message bubble
+                // Left edge of selector = (Message Left + Half Message Width) - Half Selector Width
+                const leftPosition = rect.left + (rect.width / 2) - (selectorWidth / 2);
+                
+                // Vertical: Directly under the message bubble + 10px gap
+                const topPosition = rect.bottom + 10; 
+
+                // Apply the fixed position relative to the screen
+                reactionSelector.style.left = leftPosition + 'px';
+                reactionSelector.style.top = topPosition + 'px'; 
+                
+            }, 0);
         }
 
         function hideReactionSelector() {
@@ -511,18 +505,62 @@
             currentMessageForReaction = null;
         }
 
+        // NEW: Function to update the reaction count client-side optimistically
+        function optimisticallyAddReaction(messageElement, reactionName) {
+            if (reactionName === 'clear') {
+                // Cannot reliably perform optimistic 'clear' without knowing the user's previous reaction. 
+                // We rely on the server fetch for this one.
+                return; 
+            }
+            
+            const isMine = messageElement.getAttribute('data-nickname') === currentUsername; 
+            const positionClass = isMine ? 'bottom-[-15px] left-2' : 'bottom-[-15px] right-2';
+            const reactionImageMap = { 'heart': 'heart.png', 'bad': 'bad.png', 'cry': 'cry.png', 'flip': 'flip.png' };
+
+            let displayContainer = messageElement.querySelector('.reactions-display');
+            if (!displayContainer) {
+                // Create the container if it doesn't exist
+                displayContainer = document.createElement('div');
+                displayContainer.className = `reactions-display absolute ${positionClass} flex items-center bg-white border border-slate-200 rounded-full shadow-md px-1 py-0.5 text-xs font-semibold`;
+                messageElement.appendChild(displayContainer);
+            }
+            
+            // Find the existing item for this reaction
+            let reactionItem = displayContainer.querySelector(`[data-reaction-name="${reactionName}"]`);
+            
+            if (reactionItem) {
+                // Increment existing reaction
+                const countSpan = reactionItem.querySelector('span');
+                const currentCount = parseInt(countSpan.textContent) + 1;
+                countSpan.textContent = currentCount;
+            } else {
+                // Create new reaction item
+                reactionItem = document.createElement('div');
+                reactionItem.className = 'reaction-item flex items-center ml-1';
+                reactionItem.setAttribute('data-reaction-name', reactionName);
+                reactionItem.innerHTML = `
+                    <img src="${reactionImageMap[reactionName]}" alt="${reactionName}" class="w-3.5 h-3.5"/>
+                    <span class="ml-0.5 text-slate-700">1</span>
+                `;
+                displayContainer.appendChild(reactionItem);
+            }
+        }
+
         async function handleReaction(reactionName) {
             const messageId = reactionSelector.getAttribute('data-message-id');
+            const messageElement = currentMessageForReaction; // Store the element before hiding the menu
             hideReactionSelector(); // Close the selector immediately
             
             if (!messageId || isProcessingAction) {
-                displayError('Cannot process reaction. Please wait.');
                 return;
             }
 
             isProcessingAction = true;
             disableChatActions(true);
             stopChatPolling(); 
+            
+            // --- OPTIMISTIC UPDATE: Show the reaction immediately
+            optimisticallyAddReaction(messageElement, reactionName);
 
             const formData = new FormData();
             formData.append('action', 'REACT_MESSAGE'); 
@@ -531,13 +569,14 @@
             formData.append('reaction', reactionName); 
 
             try {
-                const response = await apiRequest('POST', formData);
+                await apiRequest('POST', formData);
                 
-                displayStatus(response.message || (reactionName === 'clear' ? 'Reaction cleared.' : 'Reaction updated!'));
+                // Success: Force a fetch to confirm the state and replace the optimistic element
                 fetchMessages(); 
                 
             } catch (error) {
-                displayError('Failed to update reaction: ' + error.message);
+                // Failure: Force a fetch to revert the optimistic change.
+                fetchMessages(); 
                 
             } finally {
                 isProcessingAction = false;
@@ -546,7 +585,7 @@
             }
         }
         
-        // --- Chat Functions (unchanged logic) ---
+        // --- Chat Functions (updated createMessageElement for reaction rendering) ---
 
         function createMessageElement(msg) {
             const isMine = msg.nickname === currentUsername; 
@@ -584,7 +623,7 @@
                 `;
                 reactionKeys.forEach(reaction => {
                     reactionsHtml += `
-                        <div class="flex items-center ml-1">
+                        <div class="reaction-item flex items-center ml-1" data-reaction-name="${reaction}">
                             <img src="${reaction}.png" alt="${reaction}" class="w-3.5 h-3.5"/>
                             <span class="ml-0.5 text-slate-700">${reactions[reaction]}</span>
                         </div>
@@ -652,7 +691,7 @@
                 const existingEl = existingMessageElements.find(el => el.getAttribute('data-message-id') === messageIdStr);
 
                 if (existingEl) {
-                    if (tempMessageElement && messageIdStr === 'temp-' + tempMessageElement.getAttribute('data-temp-id') && msg.message.trim() === lastSentMessageContent.trim()) {
+                    if (tempMessageElement && msg.message.trim() === lastSentMessageContent.trim()) {
                         removeTempMessage();
                         lastSentMessageContent = '';
                         displayStatus('Message sent successfully!');
@@ -739,7 +778,6 @@
             
             messageElement.className = `flex flex-col p-3 rounded-xl ${alignmentClass} ${colorClass}`;
             messageElement.setAttribute('data-temp', 'true'); 
-            messageElement.setAttribute('data-temp-id', tempMsg.id.split('-')[1]); 
             
             messageElement.innerHTML = `
                 <div class="flex items-baseline space-x-2 mb-1">
@@ -1057,7 +1095,7 @@
                 // Start the timer for long-press
                 reactionTimer = setTimeout(() => {
                     if (messageElement.hasAttribute('data-temp')) {
-                         displayError("Cannot react to a message while it is still being sent.");
+                         // Removed error display for cleaner UI
                          return;
                     }
                     showReactionSelector(messageElement, messageId);
