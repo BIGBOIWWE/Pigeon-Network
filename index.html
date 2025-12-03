@@ -121,7 +121,7 @@
             <button data-reaction="bad" class="reaction-btn p-1 rounded-full hover:bg-slate-100 transition duration-100" title="Dislike"><img src="bad.png" alt="Dislike" class="w-8 h-8"/></button>
             <button data-reaction="cry" class="reaction-btn p-1 rounded-full hover:bg-slate-100 transition duration-100" title="Sad"><img src="cry.png" alt="Sad" class="w-8 h-8"/></button>
             <button data-reaction="flip" class="reaction-btn p-1 rounded-full hover:bg-slate-100 transition duration-100" title="Flip Table"><img src="flip.png" alt="Angry" class="w-8 h-8"/></button>
-            <button data-reaction="clear" class="reaction-btn p-1 rounded-full text-slate-500 hover:text-red-500 transition duration-100" title="Clear Reaction">
+            <button id="clear-reaction-btn" class="p-1 rounded-full text-slate-500 hover:text-red-500 transition duration-100" title="Close Reaction Selector">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -182,7 +182,7 @@
         let currentConfirmAction = null; 
         let isProcessingAction = false; 
         let tempMessageElement = null; 
-        let lastSentMessageContent = ''; 
+        let lastSentMessageContent = ''; // NEW: Used to confirm the *content* of the sent message
 
         // Reaction Variables
         let reactionTimer = null;
@@ -201,6 +201,7 @@
         const initialMessage = document.getElementById('initial-message');
         const statusMessage = document.getElementById('status-message');
         const reactionSelector = document.getElementById('reaction-selector'); 
+        const clearReactionBtn = document.getElementById('clear-reaction-btn'); // NEW: Reference to the 'X' button
 
         // Modal Elements (unchanged)
         const usernameModal = document.getElementById('username-modal');
@@ -570,7 +571,7 @@
 
         async function handleReaction(clickedReaction) {
             const messageId = reactionSelector.getAttribute('data-message-id');
-            const messageElement = currentMessageForReaction; // Store the element before hiding the menu
+            const messageElement = currentMessageForReaction; 
             hideReactionSelector(); // Close the selector immediately
             
             if (!messageId || isProcessingAction) {
@@ -582,10 +583,10 @@
 
             // 2. Determine the intended NEW state and the SERVER parameter
             let newReaction = ''; // The new reaction state on the client ('heart', 'bad', or '')
-            let serverReaction = ''; // The reaction name to send to the server ('heart', 'bad', or 'clear')
+            let serverReaction = ''; // The reaction name to send to the server ('heart', 'bad', 'cry', 'flip', or 'clear')
 
-            if (clickedReaction === 'clear' || clickedReaction === oldReaction) {
-                // Case 1: Clear button clicked OR Toggle Off (clicking existing reaction)
+            // Case 1: Toggle Off (clicking existing reaction)
+            if (clickedReaction === oldReaction) {
                 newReaction = ''; 
                 serverReaction = 'clear'; 
             } else {
@@ -738,6 +739,7 @@
                 let currentUserReactionState = existingEl ? existingEl.getAttribute('data-current-user-reaction') : '';
 
                 if (existingEl) {
+                    // NEW: Check if the current message matches the last sent content and remove temp message if so
                     if (tempMessageElement && msg.message.trim() === lastSentMessageContent.trim()) {
                         removeTempMessage();
                         lastSentMessageContent = '';
@@ -884,6 +886,9 @@
             disableChatActions(true);
             stopChatPolling();
 
+            // NEW: Immediately clear the confirmation prompt
+            displayStatus('Deletion in progress...'); 
+
             const formData = new FormData();
             formData.append('action', 'DELETE_MESSAGE'); 
             formData.append('id', messageId);
@@ -951,13 +956,15 @@
             disableChatActions(true);
 
             removeTempMessage(); 
-            renderTempMessage(message);
+            
+            // Store original message content before clearing the input
             const originalMessage = messageInput.value;
+            lastSentMessageContent = originalMessage.trim(); 
             messageInput.value = '';
 
+            renderTempMessage(originalMessage);
             showSendingState();
-            lastSentMessageContent = originalMessage;
-
+            
             const formData = new FormData();
             formData.append('action', 'SEND'); 
             formData.append('nickname', currentUsername);
@@ -1120,6 +1127,9 @@
         // Listener to hide the reaction selector when the chat container is scrolled
         chatContainer.addEventListener('scroll', hideReactionSelector);
         
+        // NEW: Listener for the 'X' button to only close the selector
+        clearReactionBtn.addEventListener('click', hideReactionSelector);
+
         // 1. Long Press / Touch Start Listener
         chatContainer.addEventListener('mousedown', handlePointerDown);
         chatContainer.addEventListener('touchstart', handlePointerDown);
@@ -1129,6 +1139,11 @@
 
             const messageElement = event.target.closest('.flex.flex-col.p-3.rounded-xl');
             
+            // Allow clicks on reaction item to prevent triggering long press timer
+            if (event.target.closest('.reaction-item')) {
+                return;
+            }
+
             if (event.target.closest('.delete-btn')) {
                 return;
             }
