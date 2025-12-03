@@ -57,10 +57,10 @@
             background: linear-gradient(135deg, #1e293b 0%, #334155 50%, #475569 100%);
         }
         
-        /* Custom style for reaction selection bar (NEW) */
+        /* Custom style for reaction selection bar (UPDATED) */
         .reaction-selector {
             position: absolute;
-            top: -50px; /* Position above the message bubble */
+            /* Vertical position is now controlled entirely by JavaScript for precision */
             left: 50%;
             transform: translateX(-50%);
             z-index: 10;
@@ -178,8 +178,8 @@
         const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbytBm4VUqcE24mkcb-5mMTIcDMfqzBNqy33U8sct03Ajexr7pvBetQHneozpz4rqzp7dg/exec';
 
         // Global State Flags
-        let currentUsername = ''; // Holds the current user's display name
-        let isGuest = false; // Tracks if the user is a guest
+        let currentUsername = ''; 
+        let isGuest = false; 
         let lastMessageCount = 0;
         let pollingInterval = null; 
         let isSigningUp = false; 
@@ -188,10 +188,10 @@
         let tempMessageElement = null; 
         let lastSentMessageContent = ''; 
 
-        // Reaction Variables (NEW)
+        // Reaction Variables
         let reactionTimer = null;
-        const LONG_PRESS_DURATION = 500; // ms
-        let currentMessageForReaction = null; // Stores the message element being reacted to
+        const LONG_PRESS_DURATION = 500; 
+        let currentMessageForReaction = null; 
         
         // DOM Elements
         const currentUsernameDisplay = document.getElementById('current-username-display');
@@ -204,9 +204,9 @@
         const messageSection = document.getElementById('message-section');
         const initialMessage = document.getElementById('initial-message');
         const statusMessage = document.getElementById('status-message');
-        const reactionSelector = document.getElementById('reaction-selector'); // New element
+        const reactionSelector = document.getElementById('reaction-selector'); 
 
-        // Modal Elements
+        // Modal Elements (unchanged)
         const usernameModal = document.getElementById('username-modal');
         const modalContent = document.getElementById('modal-content');
         const modalTitle = document.getElementById('modal-title');
@@ -219,10 +219,10 @@
         const modalErrorMessage = document.getElementById('modal-error-message');
         const guestContinueButton = document.getElementById('guest-continue-button'); 
 
-        // --- Utility Functions ---
+        // --- Utility Functions (unchanged) ---
         
         function generateGuestId() {
-            const num = Math.floor(100000 + Math.random() * 900000); // 6 random digits
+            const num = Math.floor(100000 + Math.random() * 900000); 
             return `PigeonGuest${num}`;
         }
 
@@ -231,7 +231,6 @@
             sendButton.disabled = disabled;
             if (disabled) {
                 sendButton.classList.add('disabled:bg-slate-400', 'disabled:cursor-not-allowed');
-                // Also hide reaction selector if an action starts
                 hideReactionSelector(); 
             } else {
                 sendButton.classList.remove('disabled:bg-slate-400', 'disabled:cursor-not-allowed');
@@ -300,7 +299,7 @@
             });
         }
         
-        // --- Polling Management ---
+        // --- Polling Management (unchanged) ---
         
         function stopChatPolling() {
             if (pollingInterval) {
@@ -452,7 +451,7 @@
         }
 
         function handleSuccessfulAuth(username, guest, message) {
-            currentUsername = username; // This is now the case-preserved display name
+            currentUsername = username; 
             isGuest = guest;
             if (!isGuest) {
                 localStorage.setItem(REGISTERED_USERNAME_KEY, username);
@@ -465,10 +464,10 @@
             startChatPolling();
         }
         
-        // --- Reaction Handlers (NEW) ---
+        // --- Reaction Handlers (UPDATED POSITIONING) ---
         
         function showReactionSelector(messageElement, messageId) {
-            if (!currentUsername) return; // Must be signed in/guest to react
+            if (!currentUsername) return; 
             
             // Get chat container's position relative to the viewport
             const containerRect = chatContainer.getBoundingClientRect();
@@ -485,16 +484,22 @@
 
             currentMessageForReaction = messageElement;
             
-            // Position the selector: center it horizontally above the message
-            // Calculate absolute position on the page first
+            // 1. Horizontal: Center of the message bubble
             const selectorLeft = rect.left + rect.width / 2;
-            const selectorTop = rect.top; // We want it to be above the bubble
             
-            // Convert to position relative to the scrollable chat container's *content*
-            // To position the selector correctly inside the chat container's scroll view
+            // 2. Vertical: Directly under the message bubble.
+            // rect.bottom gives the viewport y-coordinate of the bottom edge of the message.
+            const messageBottom = rect.bottom; 
+            
+            // Calculate position relative to the chat container's scroll view
+            // (messageBottom - containerRect.top) gives the position of the bottom of the bubble 
+            // relative to the top of the container's visible area.
+            // Adding chatContainer.scrollTop accounts for how much the container has scrolled.
+            const positionTop = (messageBottom - containerRect.top + chatContainer.scrollTop) + 10; // +10 for a small gap
+
+            // Set the absolute position
             reactionSelector.style.left = (selectorLeft - containerRect.left) + 'px';
-            // Position 50px above the top of the message bubble's visible area
-            reactionSelector.style.top = (selectorTop - containerRect.top + chatContainer.scrollTop - 50) + 'px'; 
+            reactionSelector.style.top = positionTop + 'px'; 
             
             // Set the message ID on the selector for easy access in the click handler
             reactionSelector.setAttribute('data-message-id', messageId);
@@ -517,19 +522,18 @@
 
             isProcessingAction = true;
             disableChatActions(true);
-            stopChatPolling(); // Prevent poll interference
+            stopChatPolling(); 
 
             const formData = new FormData();
             formData.append('action', 'REACT_MESSAGE'); 
             formData.append('id', messageId);
             formData.append('nickname', currentUsername);
-            formData.append('reaction', reactionName); // The selected reaction or 'clear'
+            formData.append('reaction', reactionName); 
 
             try {
                 const response = await apiRequest('POST', formData);
                 
                 displayStatus(response.message || (reactionName === 'clear' ? 'Reaction cleared.' : 'Reaction updated!'));
-                // Force an immediate fetch to display the new reaction counts
                 fetchMessages(); 
                 
             } catch (error) {
@@ -538,13 +542,12 @@
             } finally {
                 isProcessingAction = false;
                 disableChatActions(false);
-                startChatPolling(); // Restart polling after action is complete
+                startChatPolling(); 
             }
         }
         
-        // --- Chat Functions ---
+        // --- Chat Functions (unchanged logic) ---
 
-        // Helper function to create a single message element (UPDATED for Reactions)
         function createMessageElement(msg) {
             const isMine = msg.nickname === currentUsername; 
             const canDelete = isMine || currentUsername === ADMIN_USERNAME; 
@@ -557,28 +560,22 @@
             
             const safeMessage = msg.message.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
             
-            // Added 'group' class to help with positioning the reaction display if needed, and 'relative' is in CSS
             messageElement.className = `flex flex-col p-3 rounded-xl mb-4 ${alignmentClass} ${colorClass} group`; 
             messageElement.setAttribute('data-message-id', msg.id); 
-            messageElement.setAttribute('data-nickname', msg.nickname); // Store nickname for reaction check
+            messageElement.setAttribute('data-nickname', msg.nickname); 
             
-            // Parse Reactions JSON string from the server (msg.reactions is the new property)
             let reactions = {};
             if (msg.reactions) {
                 try {
-                    // msg.reactions is a JSON string of {reactionName: count}
                     reactions = JSON.parse(msg.reactions);
                 } catch (e) {
                     console.error("Failed to parse reactions:", msg.reactions);
                 }
             }
 
-            // Generate Reaction HTML
             let reactionsHtml = '';
-            // Define reaction order for consistent display
             const reactionOrder = ['heart', 'bad', 'cry', 'flip'];
             
-            // Filter and sort reactions based on defined order
             const reactionKeys = reactionOrder.filter(key => reactions[key] > 0);
 
             if (reactionKeys.length > 0) {
@@ -655,19 +652,15 @@
                 const existingEl = existingMessageElements.find(el => el.getAttribute('data-message-id') === messageIdStr);
 
                 if (existingEl) {
-                    // If a temporary message matches the server message, replace it and show success
                     if (tempMessageElement && messageIdStr === 'temp-' + tempMessageElement.getAttribute('data-temp-id') && msg.message.trim() === lastSentMessageContent.trim()) {
                         removeTempMessage();
                         lastSentMessageContent = '';
                         displayStatus('Message sent successfully!');
                     }
                     
-                    // Create a new element based on server data
                     const updatedEl = createMessageElement(msg);
                     
-                    // Simple check: if the HTML content is different, replace the element
                     if (existingEl.innerHTML !== updatedEl.innerHTML) {
-                         // Perform the replacement
                         const isAtBottom = chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight < 50;
                         existingEl.replaceWith(updatedEl);
                         if (isAtBottom) {
@@ -680,7 +673,6 @@
                     
                     chatContainer.appendChild(messageElement);
                     
-                    // Trigger fade-in animation
                     messageElement.style.height = '0';
                     messageElement.style.padding = '0';
                     messageElement.style.marginBottom = '0';
@@ -747,7 +739,7 @@
             
             messageElement.className = `flex flex-col p-3 rounded-xl ${alignmentClass} ${colorClass}`;
             messageElement.setAttribute('data-temp', 'true'); 
-            messageElement.setAttribute('data-temp-id', tempMsg.id.split('-')[1]); // Store a key to match later
+            messageElement.setAttribute('data-temp-id', tempMsg.id.split('-')[1]); 
             
             messageElement.innerHTML = `
                 <div class="flex items-baseline space-x-2 mb-1">
@@ -1033,22 +1025,27 @@
             }
         });
         
-        // --- Reaction Event Listeners (NEW) ---
+        // --- Reaction Event Listeners ---
 
+        // NEW: Listener to hide the reaction selector when the chat container is scrolled
+        chatContainer.addEventListener('scroll', hideReactionSelector);
+        
         // 1. Long Press / Touch Start Listener
         chatContainer.addEventListener('mousedown', handlePointerDown);
         chatContainer.addEventListener('touchstart', handlePointerDown);
 
         function handlePointerDown(event) {
-            // Only respond to main clicks/touches
             if (event.type === 'mousedown' && event.button !== 0) return; 
 
-            // Find the closest message element
             const messageElement = event.target.closest('.flex.flex-col.p-3.rounded-xl');
             
-            // Do not react if a delete button was clicked
             if (event.target.closest('.delete-btn')) {
                 return;
+            }
+            
+            // If clicking on a message, ensure the menu is closed first if it was open for a *different* message.
+            if (messageElement && currentMessageForReaction && currentMessageForReaction !== messageElement) {
+                hideReactionSelector();
             }
 
             if (messageElement) {
@@ -1059,7 +1056,6 @@
 
                 // Start the timer for long-press
                 reactionTimer = setTimeout(() => {
-                    // Check if it's a temporary message
                     if (messageElement.hasAttribute('data-temp')) {
                          displayError("Cannot react to a message while it is still being sent.");
                          return;
@@ -1068,7 +1064,6 @@
                 }, LONG_PRESS_DURATION);
                 
                 // Add listeners to cancel the timer on move/release
-                // Using document listeners to catch release outside the message bubble
                 document.addEventListener('mouseup', handlePointerUp, { once: true });
                 document.addEventListener('touchend', handlePointerUp, { once: true });
                 document.addEventListener('mousemove', handlePointerMove, { once: true });
@@ -1076,19 +1071,12 @@
             }
         }
 
-        // 2. Release / Move Listener (to cancel the long press)
+        // 2. Release / Move Listener (prevents interference, does NOT hide the menu)
         function handlePointerUp(event) {
             clearTimeout(reactionTimer);
             // Clean up temporary listeners
             document.removeEventListener('mousemove', handlePointerMove);
             document.removeEventListener('touchmove', handlePointerMove);
-            
-            // Prevent the selector from hiding if the click was *on* a reaction button
-            if (!event.target.closest('#reaction-selector')) {
-                // If the long press timer had already executed, a regular click should hide the selector
-                // unless it was on the message element itself (which is handled by subsequent clicks)
-                // We keep it simple: if you click outside the selector, it closes.
-            }
         }
         
         function handlePointerMove(event) {
@@ -1108,19 +1096,19 @@
             }
         });
         
-        // 4. Global click to hide the selector if clicking outside the selector
+        // 4. Global click to hide the selector if clicking outside
         document.addEventListener('click', (event) => {
             const clickedMessage = event.target.closest('.flex.flex-col.p-3.rounded-xl');
             const clickedSelector = event.target.closest('#reaction-selector');
 
-            // Hide if the click is neither on the selector nor on a message bubble
-            if (!clickedSelector && !clickedMessage) {
-                hideReactionSelector();
-            }
-            // If clicking on a different message bubble, the selector will be repositioned by handlePointerDown on the next long-press
-            // A simple click on a message bubble (which is NOT a long press) should also hide the menu
-            if (clickedMessage && !clickedSelector) {
-                 hideReactionSelector();
+            // Only close the menu if it's currently visible AND the click was outside the menu 
+            // AND outside the message bubble that triggered it.
+            if (!reactionSelector.classList.contains('hidden')) {
+                const isClickOnCurrentMessage = clickedMessage && clickedMessage === currentMessageForReaction;
+                
+                if (!clickedSelector && !isClickOnCurrentMessage) {
+                    hideReactionSelector();
+                }
             }
         });
 
