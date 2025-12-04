@@ -36,7 +36,7 @@
         .message-selected {
             transform: scale(1.02);
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.15); 
-            z-index: 10; 
+            /* z-index is set inline in JS to ensure it's above the z-40 blur overlay */
         }
 
         .chat-message-left {
@@ -233,7 +233,7 @@
         const initialMessage = document.getElementById('initial-message');
         const statusMessage = document.getElementById('status-message');
         const reactionSelector = document.getElementById('reaction-selector'); 
-        const reactionBlurOverlay = document.getElementById('reaction-blur-overlay'); // NEW
+        const reactionBlurOverlay = document.getElementById('reaction-blur-overlay'); 
 
         // Modal Elements (unchanged)
         const usernameModal = document.getElementById('username-modal');
@@ -500,12 +500,15 @@
 
             currentMessageForReaction = messageElement;
             
-            // NEW: Apply Blur and Scale Effect
+            // Apply Blur and Scale Effect
             reactionBlurOverlay.classList.remove('hidden');
             setTimeout(() => {
                 reactionBlurOverlay.style.opacity = '1';
             }, 10);
+            
             messageElement.classList.add('message-selected');
+            // FIX: Set a high z-index to ensure the selected message is above the blur overlay (z-40)
+            messageElement.style.zIndex = '41'; 
             
             // Get message element's position relative to the viewport
             const rect = messageElement.getBoundingClientRect();
@@ -558,9 +561,10 @@
         }
 
         function hideReactionSelector() {
-            // NEW: Remove Blur and Scale Effect
+            // Remove Blur and Scale Effect
             if (currentMessageForReaction) {
                 currentMessageForReaction.classList.remove('message-selected'); 
+                currentMessageForReaction.style.zIndex = ''; // FIX: Reset Z-index
             }
             reactionBlurOverlay.style.opacity = '0'; 
             setTimeout(() => {
@@ -639,7 +643,7 @@
             const messageId = reactionSelector.getAttribute('data-message-id');
             const messageElement = currentMessageForReaction; 
             
-            // NEW: Handle Copy Action
+            // Handle Copy Action
             if (clickedReaction === 'copy') {
                 if (messageElement) {
                     const messageContentDiv = messageElement.querySelector('.whitespace-pre-wrap');
@@ -807,7 +811,7 @@
                  return;
             }
 
-            // NEW: Direct transition fix: Check if the confirmed message is present and remove the temporary one immediately.
+            // Direct transition fix: Check if the confirmed message is present and remove the temporary one immediately.
             const confirmedMessage = newMessages.find(msg => 
                 msg.message.trim() === lastSentMessageContent.trim() && String(msg.nickname) === currentUsername
             );
@@ -991,7 +995,7 @@
 
             try {
                 await apiRequest('POST', formData);
-                displayStatus('Message deleted successfully.'); // Show success status
+                // Status message for successful deletion removed here to keep it silent.
             } catch (error) {
                 // If deletion fails, force a fetch to restore the message and show error
                 displayError('Failed to delete message. Message may be restored on next poll: ' + error.message);
@@ -1021,10 +1025,10 @@
             document.getElementById('confirm-delete-btn').onclick = () => {
                 document.getElementById('confirm-delete-btn').disabled = true;
                 
-                // NEW: Hide the prompt immediately upon confirmation
+                // Hide the prompt immediately upon confirmation
                 statusMessage.classList.add('hidden'); 
 
-                // NEW: Gray out the delete button image until it fully deletes (or disappears with the message)
+                // Gray out the delete button image until it fully deletes 
                 const deleteImg = messageElement.querySelector('.delete-btn img');
                 if (deleteImg) {
                     deleteImg.classList.add('grayscale', 'opacity-50');
