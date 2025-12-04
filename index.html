@@ -213,7 +213,7 @@
         let isProcessingAction = false; 
         let tempMessageElement = null; 
         let lastSentMessageContent = ''; 
-        let hasInitialScrollHappened = false; // NEW: Flag to track initial scroll
+        let isInitialLoad = true; // REVERTED: Use this to track initial load
 
         // Reaction Variables
         let reactionTimer = null;
@@ -249,12 +249,31 @@
         const modalErrorMessage = document.getElementById('modal-error-message');
         const guestContinueButton = document.getElementById('guest-continue-button'); 
 
-        // --- Utility Functions (updated for less status messages) ---
+        // --- Utility Functions (UPDATED: Added reliable scrollToBottom) ---
         
         function generateGuestId() {
             const num = Math.floor(100000 + Math.random() * 900000); 
             return `PigeonGuest${num}`;
         }
+        
+        /**
+         * Ensures the chat container scrolls to the absolute bottom.
+         * Uses a combination of requestAnimationFrame and a timeout to ensure
+         * all CSS transitions and layout calculations have settled.
+         */
+        function scrollToBottom() {
+            // 1. Scroll on the next animation frame for the fastest correct scroll.
+            window.requestAnimationFrame(() => {
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+                
+                // 2. Fallback scroll after 300ms (to catch the 0.3s transition on new messages)
+                // This is the key fix for scrolling "halfway".
+                setTimeout(() => {
+                    chatContainer.scrollTop = chatContainer.scrollHeight;
+                }, 300); 
+            });
+        }
+
 
         function disableChatActions(disabled) {
             messageInput.disabled = disabled;
@@ -903,18 +922,13 @@
                     const updatedEl = createMessageElement(msg);
                     
                     if (existingEl.innerHTML !== updatedEl.innerHTML) {
-                        const isAtBottom = chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight < 50;
                         
                         // Preserve the client-side reaction state on the new element
                         updatedEl.setAttribute('data-current-user-reaction', currentUserReactionState);
 
                         existingEl.replaceWith(updatedEl);
                         
-                        // Only scroll if we were at the bottom and a non-content update happened 
-                        // (which should be rare/unnecessary with the isNewMessageAdded rule below)
-                        if (isAtBottom) {
-                            // chatContainer.scrollTop = chatContainer.scrollHeight; 
-                        }
+                        // No immediate scroll here. Scroll only happens if a new message is added below.
                     }
                 } else if (!existingIds.has(messageIdStr)) {
                     // 2. Add New Messages
@@ -922,12 +936,13 @@
                     
                     chatContainer.appendChild(messageElement);
                     
+                    // Trigger the CSS transition for fade-in (Height, Padding, Margin)
                     messageElement.style.height = '0';
                     messageElement.style.padding = '0';
                     messageElement.style.marginBottom = '0';
                     messageElement.style.opacity = '0';
                     
-                    void messageElement.offsetHeight; 
+                    void messageElement.offsetHeight; // Force reflow
 
                     messageElement.style.height = ''; 
                     messageElement.style.padding = ''; 
@@ -954,12 +969,7 @@
             
             // NEW FIX: 2. Only scroll if a new message was added AND the user was already near the bottom.
             if (isNewMessageAdded && isUserNearBottom) {
-                // Use a short delay (e.g., 10ms) to ensure the browser has fully completed
-                // the layout calculations for the newly inserted message's transition/fade-in
-                // and that the final accurate scrollHeight is calculated.
-                setTimeout(() => {
-                    chatContainer.scrollTop = chatContainer.scrollHeight;
-                }, 10);
+                scrollToBottom();
             }
         }
         
@@ -1013,7 +1023,8 @@
             `;
 
             chatContainer.appendChild(messageElement);
-            chatContainer.scrollTop = chatContainer.scrollHeight;
+            // Always scroll to bottom for the temp message
+            scrollToBottom(); 
             
             tempMessageElement = messageElement;
         }
@@ -1034,15 +1045,12 @@
             try {
                 const response = await apiRequest('GET');
                 
-                // NEW: Check if this is the initial load before rendering
-                const isInitialLoad = !hasInitialScrollHappened;
-                
                 renderMessages(response.data);
                 
-                // NEW: Explicitly scroll to bottom on initial load
+                // NEW FIX: Only scroll to the bottom once after the first successful fetch/render
                 if (isInitialLoad && response.data.length > 0) {
-                    chatContainer.scrollTop = chatContainer.scrollHeight;
-                    hasInitialScrollHappened = true;
+                    scrollToBottom(); 
+                    isInitialLoad = false; // Mark initial load as complete
                 }
             } catch (error) {
                 console.error('Pigeon Poll Failed:', error.message);
