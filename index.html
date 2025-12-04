@@ -24,26 +24,15 @@
         }
         
         /* Message bubble styling */
-        .chat-message-left, .chat-message-right {
-            max-width: 80%;
-            /* Added transform and box-shadow to transition properties for smooth grow/shrink */
-            transition: opacity 0.3s ease, height 0.3s ease, padding 0.3s ease, margin-bottom 0.3s ease, transform 0.2s ease, box-shadow 0.2s ease; 
-            animation: fadeIn 0.3s ease-out;
-            position: relative; 
-        }
-        
-        /* Effect for the selected message: grows slightly and has a stronger shadow */
-        .message-selected {
-            transform: scale(1.04); /* Increased grow effect */
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.15); 
-            /* z-index is set inline in JS to ensure it's above the z-40 blur overlay */
-        }
-
         .chat-message-left {
             margin-right: auto;
+            max-width: 80%;
+            animation: fadeIn 0.3s ease-out;
         }
         .chat-message-right {
             margin-left: auto;
+            max-width: 80%;
+            animation: fadeIn 0.3s ease-out;
         }
 
         /* Fade-in animation for new messages */
@@ -52,37 +41,15 @@
             to { opacity: 1; transform: translateY(0); }
         }
         
-        /* Modal background overlay for sign-in/up */
+        /* Modal background overlay */
         .modal-overlay {
             background-color: rgba(0, 0, 0, 0.8);
             backdrop-filter: blur(4px);
-        }
-        
-        /* NEW: Blur overlay for reaction selection */
-        .modal-overlay-blur {
-            background-color: rgba(0, 0, 0, 0.5); /* Less dark overlay for the blur effect */
-            backdrop-filter: blur(4px);
-            opacity: 0;
-            transition: opacity 0.3s ease;
         }
 
         /* Fancy Body Gradient */
         .fancy-background {
             background: linear-gradient(135deg, #1e293b 0%, #334155 50%, #475569 100%);
-        }
-        
-        /* Custom style for reaction selection bar */
-        .reaction-selector {
-            position: fixed; /* Fixed position for accurate screen coordinates */
-            z-index: 50; 
-        }
-
-        /* NEW: Prevent text selection (highlighting) */
-        .unselectable {
-            -webkit-user-select: none; /* Safari */
-            -moz-user-select: none; /* Firefox */
-            -ms-user-select: none; /* IE10+/Edge */
-            user-select: none; /* Standard */
         }
     </style>
     <script>
@@ -108,8 +75,8 @@
         
         <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 border-b border-slate-200 pb-4 flex-shrink-0">
             <div class="flex items-center space-x-3 mb-2 sm:mb-0">
-                <img src="pigeon-bird.png" alt="Pigeon Logo" class="w-16 h-16"/>
-                <img src="logo.png" alt="Pigeon Network Logo Text" class="h-16"/>
+                <span class="text-4xl">🕊️</span>
+                <h1 class="text-3xl font-black text-pigeon-dark">Pigeon Network</h1>
             </div>
             
             <div class="flex items-center space-x-3">
@@ -120,47 +87,20 @@
             </div>
         </header>
         
-        <div id="chat-container" class="p-4 mb-6 border border-slate-300 rounded-xl bg-slate-50 shadow-inner overflow-y-auto flex-grow unselectable">
+        <div id="chat-container" class="space-y-4 p-4 mb-6 border border-slate-300 rounded-xl bg-slate-50 shadow-inner overflow-y-auto flex-grow">
             <div class="text-center text-slate-500 italic p-10" id="initial-message">Sign in or continue as a guest to chat.</div>
         </div>
 
         <div id="message-section" class="flex space-x-3 hidden flex-shrink-0">
             <input type="text" id="message-input" placeholder="Type your message..." class="flex-grow p-3 border border-slate-300 rounded-lg focus:ring-pigeon-main focus:border-pigeon-main transition duration-150 shadow-md disabled:bg-slate-50">
             <button id="send-button" class="w-[6rem] inline-flex items-center justify-center py-3 bg-pigeon-main text-white font-bold rounded-lg hover:bg-pigeon-dark transition duration-150 shadow-lg disabled:bg-slate-400 disabled:cursor-not-allowed">
-                <span id="send-text">Send</span>
-                <svg id="loading-spinner" class="animate-spin h-5 w-5 text-white hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
+                Send
             </button>
         </div>
 
+        <!-- Status message now also handles temporary confirmation for deletion -->
         <div id="status-message" class="mt-4 text-sm text-center font-medium p-2 rounded-lg hidden flex-shrink-0"></div>
     </div>
-    
-    <div id="reaction-blur-overlay" class="modal-overlay-blur fixed inset-0 z-40 hidden"></div>
-
-    <div id="reaction-selector" class="reaction-selector bg-white p-2 rounded-full shadow-2xl border-4 border-pigeon-light hidden">
-        <div class="flex space-x-2">
-            <button data-reaction="heart" class="reaction-btn p-1 rounded-full hover:bg-slate-100 transition duration-100" title="Love"><img src="heart.png" alt="Love" class="w-6 h-6"/></button>
-            <button data-reaction="bad" class="reaction-btn p-1 rounded-full hover:bg-slate-100 transition duration-100" title="Dislike"><img src="bad.png" alt="Dislike" class="w-6 h-6"/></button>
-            <button data-reaction="cry" class="reaction-btn p-1 rounded-full hover:bg-slate-100 transition duration-100" title="Sad"><img src="cry.png" alt="Sad" class="w-6 h-6"/></button>
-            <button data-reaction="flip" class="reaction-btn p-1 rounded-full hover:bg-slate-100 transition duration-100" title="Flip Table"><img src="flip.png" alt="Angry" class="w-6 h-6"/></button>
-            
-            <button data-reaction="copy" class="reaction-btn p-1 rounded-full text-slate-500 hover:text-pigeon-dark transition duration-100" title="Copy Message">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 7v6a2 2 0 002 2h6M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-2M8 7h6M8 7V5a2 2 0 012-2h6a2 2 0 012 2v2M8 7H6M8 7v6" />
-                </svg>
-            </button>
-
-            <button data-reaction="clear" class="reaction-btn p-1 rounded-full text-slate-500 hover:text-red-500 transition duration-100" title="Clear Reaction">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-            </button>
-        </div>
-    </div>
-
 
     <div id="username-modal" class="modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4 hidden transition-opacity duration-300">
         <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-8 transform transition-transform duration-300 scale-95 opacity-0 border-t-4 border-pigeon-main" id="modal-content">
@@ -200,41 +140,30 @@
         const MIN_USERNAME_LENGTH = 3;
         const MIN_PASSWORD_LENGTH = 6;
         const ADMIN_USERNAME = 'Mikeywikey';
+        // Updated regex to allow letters, numbers, hyphens, and underscores
         const ALPHANUMERIC_REGEX = /^[a-zA-Z0-9_-]+$/; 
         
-        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbytBm4VUqcE24mkcb-5mMTIcDMfqzBNqy33u8sct03ajexr7pvbetqhneozpz4rqzp7dg/exec';
+        // !!! IMPORTANT: Replace this URL with your deployed Google Apps Script Web App URL !!!
+        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbytBm4VUqcE24mkcb-5mMTIcDMfqzBNqy33U8sct03Ajexr7pvBetQHneozpz4rqzp7dg/exec';
 
-        // Global State Flags
-        let currentUsername = ''; 
-        let isGuest = false; 
+        let currentUsername = ''; // Holds the current user's display name
+        let isGuest = false; // Tracks if the user is a guest
         let lastMessageCount = 0;
         let pollingInterval = null; 
         let isSigningUp = false; 
         let currentConfirmAction = null; 
-        let isProcessingAction = false; 
-        let tempMessageElement = null; 
-        let lastSentMessageContent = ''; 
 
-        // Reaction Variables
-        let reactionTimer = null;
-        const LONG_PRESS_DURATION = 500; 
-        let currentMessageForReaction = null; 
-        
         // DOM Elements
         const currentUsernameDisplay = document.getElementById('current-username-display');
         const authButton = document.getElementById('auth-button'); 
         const messageInput = document.getElementById('message-input');
         const sendButton = document.getElementById('send-button');
-        const sendText = document.getElementById('send-text');
-        const loadingSpinner = document.getElementById('loading-spinner');
         const chatContainer = document.getElementById('chat-container');
         const messageSection = document.getElementById('message-section');
         const initialMessage = document.getElementById('initial-message');
         const statusMessage = document.getElementById('status-message');
-        const reactionSelector = document.getElementById('reaction-selector'); 
-        const reactionBlurOverlay = document.getElementById('reaction-blur-overlay'); 
-
-        // Modal Elements (unchanged)
+        
+        // Modal Elements
         const usernameModal = document.getElementById('username-modal');
         const modalContent = document.getElementById('modal-content');
         const modalTitle = document.getElementById('modal-title');
@@ -247,24 +176,14 @@
         const modalErrorMessage = document.getElementById('modal-error-message');
         const guestContinueButton = document.getElementById('guest-continue-button'); 
 
-        // --- Utility Functions (updated for less status messages) ---
+        // --- Utility Functions ---
         
         function generateGuestId() {
-            const num = Math.floor(100000 + Math.random() * 900000); 
+            const num = Math.floor(100000 + Math.random() * 900000); // 6 random digits
             return `PigeonGuest${num}`;
         }
 
-        function disableChatActions(disabled) {
-            messageInput.disabled = disabled;
-            sendButton.disabled = disabled;
-            if (disabled) {
-                sendButton.classList.add('disabled:bg-slate-400', 'disabled:cursor-not-allowed');
-                hideReactionSelector(); 
-            } else {
-                sendButton.classList.remove('disabled:bg-slate-400', 'disabled:cursor-not-allowed');
-            }
-        }
-        
+        // Displays error message in a red banner
         function displayError(msg) {
             console.error('Error:', msg);
             statusMessage.innerHTML = msg;
@@ -276,6 +195,7 @@
             }, 5000);
         }
         
+        // Displays success message in a green banner
         function displayStatus(msg) {
             statusMessage.innerHTML = msg;
             statusMessage.className = 'mt-4 text-sm text-center font-medium p-2 rounded-lg flex-shrink-0 text-green-700 bg-green-100 border border-green-300';
@@ -327,25 +247,28 @@
             });
         }
         
-        // --- Polling Management (unchanged) ---
+        // --- Polling Management ---
         
         function stopChatPolling() {
             if (pollingInterval) {
                 clearInterval(pollingInterval);
                 pollingInterval = null;
-                console.log('Chat polling stopped.');
             }
         }
         
         function startChatPolling() {
             stopChatPolling(); 
+            
+            // 1. Fetch messages immediately to load the correct, colorized state
             fetchMessages(); 
+            
+            // 2. Start the regular polling interval
             pollingInterval = setInterval(fetchMessages, CHAT_INTERVAL);
-            console.log('Chat polling started/restarted.');
         }
 
 
-        // --- Modal Handlers (unchanged) ---
+        // --- Modal Handlers ---
+
         function toggleModalState(isSignUpMode) {
             isSigningUp = isSignUpMode;
             
@@ -366,6 +289,7 @@
                 modalActionButton.classList.remove('bg-pigeon-main', 'hover:bg-pigeon-dark');
                 modalActionButton.classList.add('bg-green-600', 'hover:bg-green-700');
                 modalToggleLink.textContent = 'Need an account? Sign Up.';
+                verifyPasswordGroup.classList.add('hidden');
                 guestContinueButton.classList.remove('hidden'); 
                 
                 modalUsernameInput.placeholder = 'Username';
@@ -405,6 +329,23 @@
             }, 300);
         }
         
+        function handleSuccessfulAuth(username, guest, message) {
+            currentUsername = username; // This is now the case-preserved display name
+            isGuest = guest;
+            if (!isGuest) {
+                localStorage.setItem(REGISTERED_USERNAME_KEY, username);
+            }
+            hideModal();
+            updateUIForUsername();
+            displayStatus(message);
+            
+            // CRITICAL FIX: Start polling (which includes an immediate fetch) only after username is set
+            console.log('--- AUTH STATE CHANGE DETECTED (Sign In/Up/Guest) ---');
+            console.log('New currentUsername registered:', currentUsername);
+            console.log('Starting chat polling to refresh chat ownership status (turn bubbles blue)...');
+            startChatPolling();
+        }
+
         async function handleModalSave() {
             const username = modalUsernameInput.value.trim();
             const password = modalPasswordInput.value.trim();
@@ -477,547 +418,113 @@
                 modalActionButton.textContent = isSigningUp ? 'Sign Up' : 'Sign In';
             }
         }
-
-        function handleSuccessfulAuth(username, guest, message) {
-            currentUsername = username; 
-            isGuest = guest;
-            if (!isGuest) {
-                localStorage.setItem(REGISTERED_USERNAME_KEY, username);
-            }
-            hideModal();
-            updateUIForUsername();
-            displayStatus(message);
-            
-            console.log('--- AUTH STATE CHANGE DETECTED (Sign In/Up/Guest) ---');
-            startChatPolling();
-        }
         
-        // --- Reaction Handlers (UPDATED LOGIC for blur, grow, copy, and reaction state) ---
+        // --- Chat Functions ---
         
-        function showReactionSelector(messageElement, messageId) {
-            if (!currentUsername) return; 
-
-            currentMessageForReaction = messageElement;
-            
-            // Apply Blur and Scale Effect
-            reactionBlurOverlay.classList.remove('hidden');
-            setTimeout(() => {
-                reactionBlurOverlay.style.opacity = '1';
-            }, 10);
-            
-            messageElement.classList.add('message-selected');
-            // FIX: Set a high z-index to ensure the selected message is above the blur overlay (z-40)
-            messageElement.style.zIndex = '41'; 
-            
-            // --- NEW: Teleport Fix Logic ---
-            // 1. Make selector block-level but invisible to allow offsetWidth calculation
-            reactionSelector.style.visibility = 'hidden'; 
-            reactionSelector.classList.remove('hidden'); 
-
-            // Get message element's position relative to the viewport
-            const rect = messageElement.getBoundingClientRect();
-
-            // Set the message ID on the selector
-            reactionSelector.setAttribute('data-message-id', messageId);
-            
-            // 2. Calculate position (now that it's visible/block)
-            const selectorWidth = reactionSelector.offsetWidth; // Calculation must happen after removing 'hidden'
-
-            // Horizontal: Center of the message bubble
-            const leftPosition = rect.left + (rect.width / 2) - (selectorWidth / 2);
-            
-            // Vertical: Directly under the message bubble + 10px gap
-            const topPosition = rect.bottom + 10; 
-
-            // Apply the fixed position relative to the screen
-            reactionSelector.style.left = leftPosition + 'px';
-            reactionSelector.style.top = topPosition + 'px'; 
-            
-            // 3. Make it visible after positioning
-            reactionSelector.style.visibility = 'visible'; 
-            // --- END NEW LOGIC ---
-
-
-            // Set disabled state for reaction buttons based on message owner
-            const messageOwner = messageElement.getAttribute('data-nickname');
-            const isMine = messageOwner === currentUsername;
-
-            reactionSelector.querySelectorAll('.reaction-btn').forEach(btn => {
-                const reactionName = btn.getAttribute('data-reaction');
-                if (reactionName === 'copy') {
-                    // Copy button is always enabled
-                    btn.disabled = false;
-                    btn.classList.remove('opacity-50', 'cursor-not-allowed');
-                } else {
-                    // Reactions and Clear button logic
-                    const hasReaction = messageElement.getAttribute('data-current-user-reaction');
-                    
-                    if (reactionName === 'clear') {
-                        // Clear button is disabled on your own message or if there is no reaction to clear
-                        btn.disabled = isMine || !hasReaction;
-                    } else {
-                        // All other reaction buttons are disabled on your own message
-                        btn.disabled = isMine;
-                    }
-                    btn.classList.toggle('opacity-50', btn.disabled);
-                    btn.classList.toggle('cursor-not-allowed', btn.disabled);
-                }
-            });
-        }
-
-        function hideReactionSelector() {
-            // Remove Blur and Scale Effect
-            if (currentMessageForReaction) {
-                currentMessageForReaction.classList.remove('message-selected'); 
-                currentMessageForReaction.style.zIndex = ''; // FIX: Reset Z-index
-            }
-            reactionBlurOverlay.style.opacity = '0'; 
-            setTimeout(() => {
-                reactionBlurOverlay.classList.add('hidden'); 
-            }, 300); // Wait for fade transition
-
-            // Hide and reset visibility
-            reactionSelector.classList.add('hidden');
-            reactionSelector.style.visibility = 'hidden'; // Ensure it's not visible
-            currentMessageForReaction = null;
-        }
-        
-        // Function to update the reaction count client-side optimistically
-        function optimisticallyUpdateReactions(messageElement, newReaction, oldReaction) {
-            const isMine = messageElement.getAttribute('data-nickname') === currentUsername; 
-            const positionClass = isMine ? 'bottom-[-15px] left-2' : 'bottom-[-15px] right-2';
-            const reactionImageMap = { 'heart': 'heart.png', 'bad': 'bad.png', 'cry': 'cry.png', 'flip': 'flip.png' };
-
-            // Helper function to update the count of a specific reaction
-            const updateReactionCount = (reactionName, change) => {
-                let displayContainer = messageElement.querySelector('.reactions-display');
-                if (!displayContainer && change <= 0) return; // Nothing to remove
-
-                let reactionItem = displayContainer ? displayContainer.querySelector(`[data-reaction-name="${reactionName}"]`) : null;
-
-                if (reactionItem) {
-                    const countSpan = reactionItem.querySelector('span');
-                    let currentCount = parseInt(countSpan.textContent) || 0;
-                    const newCount = currentCount + change;
-
-                    if (newCount <= 0) {
-                        // Remove the reaction item if count drops to zero or below
-                        reactionItem.remove();
-                        
-                        // If the display container is now empty, remove it too
-                        if (displayContainer.children.length === 0) {
-                            displayContainer.remove();
-                            // If the container is removed, we must ensure we don't try to reuse the old reference.
-                            displayContainer = null; 
-                        }
-                    } else {
-                        countSpan.textContent = newCount;
-                    }
-                } else if (change > 0) {
-                    // Create new reaction item (only if adding)
-                    if (!displayContainer) {
-                        displayContainer = document.createElement('div');
-                        displayContainer.className = `reactions-display absolute ${positionClass} flex items-center bg-white border border-slate-200 rounded-full shadow-md px-1 py-0.5 text-xs font-semibold`;
-                        messageElement.appendChild(displayContainer);
-                    }
-                    
-                    reactionItem = document.createElement('div');
-                    reactionItem.className = 'reaction-item flex items-center ml-1';
-                    reactionItem.setAttribute('data-reaction-name', reactionName);
-                    reactionItem.innerHTML = `
-                        <img src="${reactionImageMap[reactionName]}" alt="${reactionName}" class="w-4 h-4"/>
-                        <span class="ml-0.5 text-slate-700">${change}</span>
-                    `;
-                    displayContainer.appendChild(reactionItem);
-                }
-            };
-            
-            // 1. Decrement the old reaction count (if one exists)
-            if (oldReaction) { 
-                updateReactionCount(oldReaction, -1);
-            }
-
-            // 2. Increment the new reaction count (if one exists)
-            if (newReaction) { 
-                updateReactionCount(newReaction, 1);
-            }
-            
-            // 3. Update the tracking attribute on the message element
-            messageElement.setAttribute('data-current-user-reaction', newReaction);
-        }
-
-        async function handleReaction(clickedReaction) {
-            const messageId = reactionSelector.getAttribute('data-message-id');
-            const messageElement = currentMessageForReaction; 
-            
-            // Handle Copy Action
-            if (clickedReaction === 'copy') {
-                if (messageElement) {
-                    const messageContentDiv = messageElement.querySelector('.whitespace-pre-wrap');
-                    if (messageContentDiv) {
-                        try {
-                            await navigator.clipboard.writeText(messageContentDiv.textContent);
-                            displayStatus('Message copied to clipboard! 📋');
-                        } catch (err) {
-                            console.error('Failed to copy text: ', err);
-                            displayError('Failed to copy message to clipboard.');
-                        }
-                    }
-                }
-                hideReactionSelector();
-                return;
-            }
-            
-            hideReactionSelector(); 
-            
-            // Check if the reaction button was disabled (e.g., trying to react to own message)
-            if (reactionSelector.querySelector(`[data-reaction="${clickedReaction}"]`).disabled) {
-                return;
-            }
-
-            if (!messageId || isProcessingAction) {
-                return;
-            }
-
-            // 1. Determine the OLD state
-            const oldReaction = messageElement.getAttribute('data-current-user-reaction') || '';
-
-            // 2. Determine the intended NEW state and the SERVER parameter
-            let newReaction = ''; 
-            let serverReaction = ''; 
-
-            if (clickedReaction === 'clear' || clickedReaction === oldReaction) {
-                // Case 1: Clear button clicked OR Toggle Off (clicking existing reaction)
-                newReaction = ''; 
-                serverReaction = 'clear'; 
-            } else {
-                // Case 2: Add new reaction OR Replace old reaction
-                newReaction = clickedReaction;
-                serverReaction = clickedReaction;
-            }
-
-            if (!oldReaction && newReaction === '') {
-                // Edge Case: Clicking 'clear' when there's no reaction. NO-OP.
-                return;
-            }
-
-            // 3. Perform the optimistic DOM update BEFORE the API call
-            optimisticallyUpdateReactions(messageElement, newReaction, oldReaction);
-            
-            isProcessingAction = true;
-            disableChatActions(true);
-            stopChatPolling(); 
-
-            const formData = new FormData();
-            formData.append('action', 'REACT_MESSAGE'); 
-            formData.append('id', messageId);
-            formData.append('nickname', currentUsername);
-            formData.append('reaction', serverReaction); 
-
-            try {
-                await apiRequest('POST', formData);
-                fetchMessages(); 
-            } catch (error) {
-                fetchMessages(); 
-            } finally {
-                isProcessingAction = false;
-                disableChatActions(false);
-                startChatPolling(); 
-            }
-        }
-        
-        // --- Chat Functions (updated createMessageElement for user reaction state) ---
-
-        function createMessageElement(msg) {
-            const isMine = msg.nickname === currentUsername; 
-            const canDelete = isMine || currentUsername === ADMIN_USERNAME; 
-            
-            const messageElement = document.createElement('div');
-            
-            const alignmentClass = isMine ? 'chat-message-right' : 'chat-message-left';
-            const colorClass = isMine ? 'bg-pigeon-main text-white shadow-xl' : 'bg-white shadow-lg text-slate-800 border border-slate-100'; 
-            const nicknameColor = isMine ? 'text-white/80' : 'text-pigeon-dark';
-            
-            const safeMessage = msg.message.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            
-            messageElement.className = `flex flex-col p-3 rounded-xl mb-4 ${alignmentClass} ${colorClass} group`; 
-            messageElement.setAttribute('data-message-id', msg.id); 
-            messageElement.setAttribute('data-nickname', msg.nickname); 
-            
-            messageElement.setAttribute('data-current-user-reaction', ''); 
-            
-            let reactions = {};
-            if (msg.reactions) {
-                try {
-                    reactions = JSON.parse(msg.reactions);
-                } catch (e) {
-                    console.error("Failed to parse reactions:", msg.reactions);
-                }
-            }
-
-            let reactionsHtml = '';
-            const reactionOrder = ['heart', 'bad', 'cry', 'flip'];
-            
-            const reactionKeys = reactionOrder.filter(key => reactions[key] > 0);
-
-            if (reactionKeys.length > 0) {
-                reactionsHtml = `
-                    <div class="reactions-display absolute ${isMine ? 'bottom-[-15px] left-2' : 'bottom-[-15px] right-2'} flex items-center bg-white border border-slate-200 rounded-full shadow-md px-1 py-0.5 text-xs font-semibold">
-                `;
-                reactionKeys.forEach(reaction => {
-                    reactionsHtml += `
-                        <div class="reaction-item flex items-center ml-1" data-reaction-name="${reaction}">
-                            <img src="${reaction}.png" alt="${reaction}" class="w-4 h-4"/>
-                            <span class="ml-0.5 text-slate-700">${reactions[reaction]}</span>
-                        </div>
-                    `;
-                });
-                reactionsHtml += `</div>`;
-            }
-
-            messageElement.innerHTML = `
-                <div class="flex items-baseline space-x-2 mb-1">
-                    <span class="font-bold text-sm ${nicknameColor}">${msg.nickname}</span>
-                    <span class="text-xs ${isMine ? 'text-white/50' : 'text-slate-400'}">${msg.timestamp}</span>
-                </div>
-                
-                <div class="flex items-start justify-between">
-                    <div class="whitespace-pre-wrap">${safeMessage}</div>
-                    ${canDelete ? `
-                        <button 
-                            data-id="${msg.id}" 
-                            class="delete-btn ml-3 flex-shrink-0 p-1 rounded-full transition duration-150 
-                            ${isMine ? 'hover:bg-red-600' : 'bg-white/20 hover:bg-red-500'}"
-                            title="Delete message"
-                        >
-                            <img src="delete-xxl.png" alt="Delete" class="w-4 h-4" /> 
-                        </button>
-                    ` : ''}
-                </div>
-                ${reactionsHtml}
-            `;
-            return messageElement;
-        }
-
-        function renderMessages(newMessages) {
-            if (isProcessingAction) {
-                console.log('Render skipped: Action in progress.');
-                return;
-            }
-
+        function renderMessages(messages) {
             const isScrolledToBottom = chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight < 50;
-            
-            if (newMessages.length === 0) {
-                 if (lastMessageCount > 0 || chatContainer.children.length > 1) { 
-                    chatContainer.innerHTML = '';
-                    initialMessage.textContent = 'The chat is currently empty. Be the first to send a message!';
-                    initialMessage.classList.remove('hidden');
-                    chatContainer.appendChild(initialMessage);
-                 }
+            const currentAdmin = currentUsername === ADMIN_USERNAME;
+
+            if (messages.length === 0) {
+                 initialMessage.textContent = 'The chat is currently empty. Be the first to send a message!';
+                 initialMessage.classList.remove('hidden');
+                 chatContainer.innerHTML = '';
+                 chatContainer.appendChild(initialMessage);
                  lastMessageCount = 0;
                  return;
             }
-
-            // Direct transition fix: Check if the confirmed message is present and remove the temporary one immediately.
-            const confirmedMessage = newMessages.find(msg => 
-                msg.message.trim() === lastSentMessageContent.trim() && String(msg.nickname) === currentUsername
-            );
-
-            if (tempMessageElement && confirmedMessage) {
-                removeTempMessage();
-                lastSentMessageContent = '';
-            }
-
-            if (initialMessage.parentNode && !initialMessage.classList.contains('hidden')) {
-                initialMessage.classList.add('hidden');
-            }
-
-            const existingMessageElements = Array.from(chatContainer.querySelectorAll('[data-message-id]'));
-            const existingIds = new Set(existingMessageElements.map(el => el.getAttribute('data-message-id')));
-            const newMessageIds = new Set(newMessages.map(msg => String(msg.id)));
-
-            let isNewMessageAdded = false;
-
-            // 1. Update/Replace Existing Messages (for new reactions or content changes)
-            newMessages.forEach(msg => {
-                const messageIdStr = String(msg.id);
-                const existingEl = existingMessageElements.find(el => el.getAttribute('data-message-id') === messageIdStr);
-                
-                // Get the current user's reaction state before replacement, so it's not lost
-                let currentUserReactionState = existingEl ? existingEl.getAttribute('data-current-user-reaction') : '';
-
-                if (existingEl) {
-                    const updatedEl = createMessageElement(msg);
-                    
-                    if (existingEl.innerHTML !== updatedEl.innerHTML) {
-                        const isAtBottom = chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight < 50;
-                        
-                        // Preserve the client-side reaction state on the new element
-                        updatedEl.setAttribute('data-current-user-reaction', currentUserReactionState);
-
-                        existingEl.replaceWith(updatedEl);
-                        
-                        if (isAtBottom) {
-                            chatContainer.scrollTop = chatContainer.scrollHeight;
-                        }
-                    }
-                } else if (!existingIds.has(messageIdStr)) {
-                    // 2. Add New Messages
-                    const messageElement = createMessageElement(msg);
-                    
-                    chatContainer.appendChild(messageElement);
-                    
-                    messageElement.style.height = '0';
-                    messageElement.style.padding = '0';
-                    messageElement.style.marginBottom = '0';
-                    messageElement.style.opacity = '0';
-                    
-                    void messageElement.offsetHeight; 
-
-                    messageElement.style.height = ''; 
-                    messageElement.style.padding = ''; 
-                    messageElement.style.marginBottom = ''; 
-                    messageElement.style.opacity = '1';
-
-                    isNewMessageAdded = true;
-                }
-            });
-
-            // 3. Remove Deleted Messages
-            existingMessageElements.forEach(el => {
-                const id = el.getAttribute('data-message-id');
-                if (!newMessageIds.has(id)) {
-                    el.style.opacity = '0';
-                    el.style.height = '0';
-                    el.style.padding = '0';
-                    el.style.marginBottom = '0';
-                    setTimeout(() => el.remove(), 300); 
-                }
-            });
-
-            lastMessageCount = newMessages.length;
             
-            if (isNewMessageAdded || isScrolledToBottom) {
+            if (messages.length === lastMessageCount && lastMessageCount > 0) {
+                return;
+            }
+            
+            chatContainer.innerHTML = '';
+            initialMessage.classList.add('hidden');
+
+            messages.forEach(msg => {
+                // The CRITICAL check for ownership
+                const isMine = msg.nickname === currentUsername; 
+                const canDelete = isMine || currentAdmin; 
+                
+                const messageElement = document.createElement('div');
+                
+                const alignmentClass = isMine ? 'chat-message-right' : 'chat-message-left';
+                // White/Gray if not owned, Blue if owned
+                const colorClass = isMine ? 'bg-pigeon-main text-white shadow-xl' : 'bg-white shadow-lg text-slate-800 border border-slate-100'; 
+                const nicknameColor = isMine ? 'text-white/80' : 'text-pigeon-dark';
+                
+                const safeMessage = msg.message.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                
+                messageElement.className = `flex flex-col p-3 rounded-xl ${alignmentClass} ${colorClass}`;
+                
+                messageElement.innerHTML = `
+                    <div class="flex items-baseline space-x-2 mb-1">
+                        <span class="font-bold text-sm ${nicknameColor}">${msg.nickname}</span>
+                        <span class="text-xs ${isMine ? 'text-white/50' : 'text-slate-400'}">${msg.timestamp}</span>
+                    </div>
+                    
+                    <div class="flex items-start justify-between">
+                        <div class="whitespace-pre-wrap">${safeMessage}</div>
+                        ${canDelete ? `
+                            <button 
+                                data-id="${msg.id}" 
+                                class="delete-btn ml-3 flex-shrink-0 text-xs p-1 rounded-full hover:bg-red-600 transition duration-150 
+                                ${isMine ? 'text-white/80 hover:text-white' : 'text-red-400 hover:text-white bg-white/20 hover:bg-red-500'}"
+                                title="Delete message"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm6 0a1 1 0 112 0v6a1 1 0 11-2 0V8z" clip-rule="evenodd" />
+                                </svg>
+                            </button>
+                        ` : ''}
+                    </div>
+                `;
+
+                chatContainer.appendChild(messageElement);
+            });
+
+            lastMessageCount = messages.length;
+
+            if (isScrolledToBottom) {
                 chatContainer.scrollTop = chatContainer.scrollHeight;
-            }
-        }
-        
-        function showSendingState() {
-            sendText.classList.add('hidden');
-            loadingSpinner.classList.remove('hidden');
-        }
-
-        function hideSendingState() {
-            sendText.classList.remove('hidden');
-            loadingSpinner.classList.add('hidden');
-        }
-
-        function renderTempMessage(message) {
-            if (tempMessageElement) {
-                tempMessageElement.remove();
-            }
-            
-            const tempMsg = {
-                id: 'temp-' + Date.now(), 
-                nickname: currentUsername,
-                message: message,
-                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            };
-
-            const messageElement = document.createElement('div');
-            const alignmentClass = 'chat-message-right';
-            const colorClass = 'bg-pigeon-main text-white shadow-xl opacity-70 mb-4'; 
-            const nicknameColor = 'text-white/80';
-            
-            const safeMessage = tempMsg.message.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            
-            messageElement.className = `flex flex-col p-3 rounded-xl ${alignmentClass} ${colorClass}`;
-            messageElement.setAttribute('data-temp', 'true'); 
-            
-            messageElement.innerHTML = `
-                <div class="flex items-baseline space-x-2 mb-1">
-                    <span class="font-bold text-sm ${nicknameColor}">${tempMsg.nickname}</span>
-                    <span class="text-xs ${nicknameColor} flex items-center space-x-1">
-                        <svg class="animate-spin h-3 w-3 mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        <span>Sending...</span>
-                    </span>
-                </div>
-                
-                <div class="flex items-start justify-between">
-                    <div class="whitespace-pre-wrap">${safeMessage}</div>
-                </div>
-            `;
-
-            chatContainer.appendChild(messageElement);
-            chatContainer.scrollTop = chatContainer.scrollHeight;
-            
-            tempMessageElement = messageElement;
-        }
-
-        function removeTempMessage() {
-            if (tempMessageElement) {
-                tempMessageElement.remove();
-                tempMessageElement = null;
             }
         }
 
         async function fetchMessages() {
-            if (isProcessingAction && !pollingInterval) { 
-                console.log('Skipping fetchMessages call while waiting for action confirmation.');
-                return;
-            }
-
             try {
                 const response = await apiRequest('GET');
                 renderMessages(response.data);
             } catch (error) {
                 console.error('Pigeon Poll Failed:', error.message);
-                if (chatContainer.children.length === 0 || (chatContainer.children.length === 1 && chatContainer.contains(initialMessage))) {
-                    initialMessage.textContent = 'Error loading messages. Check server connection.';
-                    initialMessage.classList.remove('hidden');
-                }
+                initialMessage.textContent = 'Error loading messages. Check server connection.';
+                initialMessage.classList.remove('hidden');
             }
         }
         
-        async function handleDeleteMessage(messageId, messageElement) {
-            isProcessingAction = true;
-            disableChatActions(true);
-            stopChatPolling();
-
+        async function handleDeleteMessage(messageId) {
+            
             const formData = new FormData();
             formData.append('action', 'DELETE_MESSAGE'); 
             formData.append('id', messageId);
             formData.append('nickname', currentUsername); 
 
-            // Visually remove the message instantly (fading)
-            messageElement.style.opacity = '0'; 
-            messageElement.style.height = '0';
-            messageElement.style.padding = '0';
-            messageElement.style.marginBottom = '0'; 
-            
-            setTimeout(() => messageElement.remove(), 300); 
+            messageInput.disabled = true;
+            sendButton.disabled = true;
 
             try {
-                await apiRequest('POST', formData);
-                // Status message for successful deletion removed here to keep it silent.
-            } catch (error) {
-                // If deletion fails, force a fetch to restore the message and show error
-                displayError('Failed to delete message. Message may be restored on next poll: ' + error.message);
+                const response = await apiRequest('POST', formData);
+                displayStatus(response.message || 'Message deleted.');
                 setTimeout(fetchMessages, 100); 
+            } catch (error) {
+                displayError('Failed to delete message: ' + error.message);
             } finally {
-                isProcessingAction = false;
-                disableChatActions(false);
+                messageInput.disabled = false;
+                sendButton.disabled = false;
                 updateUIForUsername(); 
-                startChatPolling();
             }
         }
         
-        function showDeleteConfirmation(messageId, messageElement) {
-            if (isProcessingAction) return;
-
+        function showDeleteConfirmation(messageId) {
             clearTimeout(currentConfirmAction);
             statusMessage.innerHTML = `
                 <div class="flex items-center justify-center space-x-4">
@@ -1031,17 +538,7 @@
 
             document.getElementById('confirm-delete-btn').onclick = () => {
                 document.getElementById('confirm-delete-btn').disabled = true;
-                
-                // Hide the prompt immediately upon confirmation
-                statusMessage.classList.add('hidden'); 
-
-                // Gray out the delete button image until it fully deletes 
-                const deleteImg = messageElement.querySelector('.delete-btn img');
-                if (deleteImg) {
-                    deleteImg.classList.add('grayscale', 'opacity-50');
-                }
-
-                handleDeleteMessage(messageId, messageElement);
+                handleDeleteMessage(messageId);
             };
 
             document.getElementById('cancel-delete-btn').onclick = () => {
@@ -1057,40 +554,30 @@
                  return;
             }
 
-            if (isProcessingAction) {
-                displayError('Please wait for the previous action to complete.');
-                return;
-            }
-
-            isProcessingAction = true;
-            disableChatActions(true);
-
-            removeTempMessage(); 
-            renderTempMessage(message);
-            const originalMessage = messageInput.value;
-            messageInput.value = '';
-
-            showSendingState();
-            lastSentMessageContent = originalMessage;
+            messageInput.disabled = true;
+            sendButton.disabled = true;
+            sendButton.textContent = 'Sending...';
 
             const formData = new FormData();
             formData.append('action', 'SEND'); 
             formData.append('nickname', currentUsername);
-            formData.append('message', originalMessage);
+            formData.append('message', message);
 
             try {
                 await apiRequest('POST', formData);
-                fetchMessages(); 
-            } catch (error) {
-                removeTempMessage();
-                messageInput.value = originalMessage; 
-                displayError('Failed to send message: ' + error.message);
-                lastSentMessageContent = '';
-            } finally {
-                isProcessingAction = false;
-                hideSendingState();
-                disableChatActions(false);
+                
+                messageInput.value = '';
+                messageInput.disabled = false;
+                sendButton.disabled = false;
+                sendButton.textContent = 'Send';
                 messageInput.focus();
+                
+                setTimeout(fetchMessages, 200); 
+            } catch (error) {
+                displayError('Failed to send message: ' + error.message);
+                messageInput.disabled = false;
+                sendButton.disabled = false;
+                sendButton.textContent = 'Send';
             }
         }
         
@@ -1115,13 +602,9 @@
             authButton.textContent = isGuest || !isAuth ? 'Sign In' : 'Sign Out';
             
             messageSection.classList.toggle('hidden', !isAuth); 
-            if (!isAuth) {
-                messageInput.disabled = true; 
-                sendButton.disabled = true;
-            } else {
-                disableChatActions(isProcessingAction);
-            }
-            sendText.textContent = 'Send';
+            messageInput.disabled = !isAuth; 
+            sendButton.disabled = !isAuth;
+            sendButton.textContent = 'Send';
             
             if (isAuth) {
                 initialMessage.textContent = `Welcome to Pigeon Network, ${currentUsername}! Fetching messages...`;
@@ -1129,16 +612,15 @@
                 initialMessage.textContent = 'Sign in or continue as a guest to chat.';
                 initialMessage.classList.remove('hidden');
             }
-            
-            hideSendingState();
         }
 
         // --- Event Listeners and Initialization ---
         
         authButton.addEventListener('click', () => {
             if (currentUsername && !isGuest) {
+                // Sign Out logic (Registered User -> Unauthenticated State)
                 displayStatus("You have successfully signed out. Your messages are no longer highlighted.");
-                stopChatPolling();
+                stopChatPolling(); // Stop polling immediately
                 
                 currentUsername = ''; 
                 isGuest = true; 
@@ -1146,8 +628,13 @@
                 updateUIForUsername();
                 showModal(); 
                 
+                // CRITICAL FIX: Force message re-render using the now-empty currentUsername
+                console.log('--- SIGN OUT DETECTED ---');
+                console.log('New currentUsername registered: (cleared)');
+                console.log('Running fetchMessages() to remove chat ownership status (turn bubbles white)...');
                 fetchMessages(); 
             } else {
+                // Sign In / Register logic
                 showModal();
             }
         });
@@ -1167,20 +654,28 @@
         });
 
         modalActionButton.addEventListener('click', handleModalSave);
+
+        // Clear error message on input change
         modalUsernameInput.addEventListener('input', () => { modalErrorMessage.classList.add('hidden'); });
         modalPasswordInput.addEventListener('input', () => { modalErrorMessage.classList.add('hidden'); });
         modalVerifyPasswordInput.addEventListener('input', () => { modalErrorMessage.classList.add('hidden'); });
+
+        // Add key listeners for better usability
         modalUsernameInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') { modalPasswordInput.focus(); }
         });
+
         modalPasswordInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 if (isSigningUp) { modalVerifyPasswordInput.focus(); } else { handleModalSave(); }
             }
         });
+
         modalVerifyPasswordInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') { handleModalSave(); }
         });
+        
+        // Add listener to restrict characters in the input field while typing
         modalUsernameInput.addEventListener('input', (e) => {
              if (isSigningUp) {
                 const sanitizedValue = e.target.value.replace(/[^a-zA-Z0-9_-]/g, '');
@@ -1219,113 +714,23 @@
                     displayError("You must be signed in to delete messages.");
                     return;
                 }
-                if (isProcessingAction) {
-                     displayError("Please wait for the current operation to complete before deleting a message.");
-                     return;
-                }
-                
                 const messageId = parseInt(deleteButton.getAttribute('data-id'));
-                const messageElement = deleteButton.closest('.flex.flex-col.p-3.rounded-xl'); 
-                showDeleteConfirmation(messageId, messageElement);
+                showDeleteConfirmation(messageId);
             }
         });
-        
-        // --- Reaction Event Listeners ---
-
-        // Listener to hide the reaction selector when the chat container is scrolled
-        chatContainer.addEventListener('scroll', hideReactionSelector);
-        
-        // 1. Long Press / Touch Start Listener
-        chatContainer.addEventListener('mousedown', handlePointerDown);
-        chatContainer.addEventListener('touchstart', handlePointerDown);
-
-        function handlePointerDown(event) {
-            if (event.type === 'mousedown' && event.button !== 0) return; 
-
-            const messageElement = event.target.closest('.flex.flex-col.p-3.rounded-xl');
-            
-            if (event.target.closest('.delete-btn')) {
-                return;
-            }
-            
-            // If clicking on a message, ensure the menu is closed first if it was open for a *different* message.
-            if (messageElement && currentMessageForReaction && currentMessageForReaction !== messageElement) {
-                hideReactionSelector();
-            }
-
-            if (messageElement) {
-                const messageId = messageElement.getAttribute('data-message-id');
-                
-                // Clear any existing timer
-                clearTimeout(reactionTimer);
-
-                // Start the timer for long-press
-                reactionTimer = setTimeout(() => {
-                    if (messageElement.hasAttribute('data-temp')) {
-                         return; // Cannot react to temp message
-                    }
-                    showReactionSelector(messageElement, messageId);
-                }, LONG_PRESS_DURATION);
-                
-                // Add listeners to cancel the timer on move/release
-                document.addEventListener('mouseup', handlePointerUp, { once: true });
-                document.addEventListener('touchend', handlePointerUp, { once: true });
-                document.addEventListener('mousemove', handlePointerMove, { once: true });
-                document.addEventListener('touchmove', handlePointerMove, { once: true });
-            }
-        }
-
-        // 2. Release / Move Listener (prevents interference, does NOT hide the menu)
-        function handlePointerUp(event) {
-            clearTimeout(reactionTimer);
-            // Clean up temporary listeners
-            document.removeEventListener('mousemove', handlePointerMove);
-            document.removeEventListener('touchmove', handlePointerMove);
-        }
-        
-        function handlePointerMove(event) {
-            // Cancel the long-press if the pointer moves too much
-            clearTimeout(reactionTimer);
-            // Clean up listeners if move is detected
-            document.removeEventListener('mouseup', handlePointerUp);
-            document.removeEventListener('touchend', handlePointerUp);
-        }
-
-        // 3. Reaction Button Click Listener
-        reactionSelector.addEventListener('click', (event) => {
-            const reactionButton = event.target.closest('.reaction-btn');
-            if (reactionButton) {
-                const reactionName = reactionButton.getAttribute('data-reaction');
-                handleReaction(reactionName);
-            }
-        });
-        
-        // 4. Global click to hide the selector if clicking outside
-        document.addEventListener('click', (event) => {
-            const clickedMessage = event.target.closest('.flex.flex-col.p-3.rounded-xl');
-            const clickedSelector = event.target.closest('#reaction-selector');
-
-            // Only close the menu if it's currently visible AND the click was outside the menu 
-            // AND outside the message bubble that triggered it.
-            if (!reactionSelector.classList.contains('hidden')) {
-                const isClickOnCurrentMessage = clickedMessage && clickedMessage === currentMessageForReaction;
-                
-                if (!clickedSelector && !isClickOnCurrentMessage) {
-                    hideReactionSelector();
-                }
-            }
-        });
-
 
         document.addEventListener('DOMContentLoaded', () => {
             const savedUsername = localStorage.getItem(REGISTERED_USERNAME_KEY);
             
             if (savedUsername) {
+                // If the user has a saved username, authenticate them automatically and start chat polling
                 handleSuccessfulAuth(savedUsername, false, `Welcome back, ${savedUsername}! Fetching messages...`);
             } else {
-                // Automatically sign the user in as a guest
-                const guestUsername = generateGuestId();
-                handleSuccessfulAuth(guestUsername, true, `Welcome! You are now chatting as Guest: ${guestUsername}.`);
+                // Otherwise, initialize UI and prompt for sign in/guest
+                currentUsername = ''; 
+                isGuest = true; 
+                updateUIForUsername(); 
+                showModal();
             }
         });
     </script>
