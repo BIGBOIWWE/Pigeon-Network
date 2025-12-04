@@ -27,7 +27,7 @@
         .chat-message-left, .chat-message-right {
             max-width: 80%;
             /* Added transform and box-shadow to transition properties for smooth grow/shrink */
-            transition: opacity 0.3s ease, height 0.3s ease, padding 0.3s ease, margin-bottom 0.3s ease, transform 0.2s ease, box-shadow 0.2s ease; 
+            transition: opacity 0.3s ease, height 0.3s ease, padding 0.3s ease, margin-bottom 0.3s ease, transform 0.2s ease, box-shadow 0.2s ease, filter 0.3s ease; 
             animation: fadeIn 0.3s ease-out;
             position: relative; 
         }
@@ -58,12 +58,10 @@
             backdrop-filter: blur(4px);
         }
         
-        /* NEW: Blur overlay for reaction selection */
+        /* NEW: Reaction overlay - backdrop-filter: blur(4px); removed to keep the BODY background sharp */
         .modal-overlay-blur {
-            background-color: rgba(0, 0, 0, 0.5); /* Less dark overlay for the blur effect */
-            backdrop-filter: blur(4px);
+            background-color: rgba(0, 0, 0, 0.5); /* Less dark overlay for the dimming effect */
             opacity: 0;
-            transition: opacity 0.3s ease;
         }
 
         /* Fancy Body Gradient */
@@ -77,7 +75,7 @@
             z-index: 100; /* Increased z-index to ensure it's on top of everything */
         }
 
-        /* NEW: Prevent text selection (highlighting) */
+        /* Prevent text selection (highlighting) */
         .unselectable {
             -webkit-user-select: none; /* Safari */
             -moz-user-select: none; /* Firefox */
@@ -104,9 +102,9 @@
     </script>
 </head>
 <body class="fancy-background min-h-screen font-sans flex flex-col items-center justify-center overflow-y-hidden">
-    <div class="w-full max-w-2xl bg-white/95 backdrop-blur-sm shadow-2xl rounded-2xl p-6 sm:p-8 border border-slate-300 transform transition-all duration-500 m-auto flex flex-col h-[95vh]">
+    <div id="main-chat-wrapper" class="w-full max-w-2xl bg-white/95 shadow-2xl rounded-2xl p-6 sm:p-8 border border-slate-300 transform m-auto flex flex-col h-[95vh] relative z-10">
         
-        <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 border-b border-slate-200 pb-4 flex-shrink-0">
+        <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 border-b border-slate-200 pb-4 flex-shrink-0 transition-all duration-300">
             <div class="flex items-center space-x-3 mb-2 sm:mb-0">
                 <img src="pigeon-bird.png" alt="Pigeon Logo" class="w-16 h-16"/>
                 <img src="logo.png" alt="Pigeon Network Logo Text" class="h-16"/>
@@ -124,7 +122,7 @@
             <div class="text-center text-slate-500 italic p-10" id="initial-message">Sign in or continue as a guest to chat.</div>
         </div>
 
-        <div id="message-section" class="flex space-x-3 hidden flex-shrink-0">
+        <div id="message-section" class="flex space-x-3 hidden flex-shrink-0 transition-all duration-300">
             <input type="text" id="message-input" placeholder="Type your message..." class="flex-grow p-3 border border-slate-300 rounded-lg focus:ring-pigeon-main focus:border-pigeon-main transition duration-150 shadow-md disabled:bg-slate-50">
             <button id="send-button" class="w-[6rem] inline-flex items-center justify-center py-3 bg-pigeon-main text-white font-bold rounded-lg hover:bg-pigeon-dark transition duration-150 shadow-lg disabled:bg-slate-400 disabled:cursor-not-allowed">
                 <span id="send-text">Send</span>
@@ -222,6 +220,8 @@
         let currentMessageForReaction = null; 
         
         // DOM Elements
+        const mainChatWrapper = document.getElementById('main-chat-wrapper'); 
+        const chatHeader = document.querySelector('header'); // Reference to the header
         const currentUsernameDisplay = document.getElementById('current-username-display');
         const authButton = document.getElementById('auth-button'); 
         const messageInput = document.getElementById('message-input');
@@ -493,30 +493,50 @@
             startChatPolling();
         }
         
-        // --- Reaction Handlers (UPDATED LOGIC for blur, grow, copy, and reaction state) ---
+        // --- Reaction Handlers (CRITICAL UPDATE FOR BLUR FIX) ---
         
         function showReactionSelector(messageElement, messageId) {
             if (!currentUsername) return; 
 
             currentMessageForReaction = messageElement;
             
-            // Apply Blur and Scale Effect
+            // 1. LIFT THE MESSAGE'S ANCESTOR ABOVE THE BLUR OVERLAY (z-40)
+            // AND set the background to pure white to prevent the body's dark gradient from causing a visual flash.
+            mainChatWrapper.style.zIndex = '50'; 
+            mainChatWrapper.style.backgroundColor = 'rgb(255, 255, 255)'; 
+
+            // 2. Manually blur all other elements inside the wrapper to achieve selective focus.
+            // Blur all messages except the one selected
+            document.querySelectorAll('.chat-message-left, .chat-message-right').forEach(msg => {
+                if (msg !== messageElement) {
+                    msg.style.filter = 'blur(2px)';
+                    msg.style.opacity = '0.7';
+                }
+            });
+            
+            // Blur the non-chat-container elements (Header, Input Section)
+            chatHeader.style.filter = 'blur(2px)';
+            chatHeader.style.opacity = '0.7';
+            messageSection.style.filter = 'blur(2px)';
+            messageSection.style.opacity = '0.7';
+
+
+            // 3. Apply Blur Overlay (INSTANT VISIBILITY)
             reactionBlurOverlay.classList.remove('hidden');
-            setTimeout(() => {
-                reactionBlurOverlay.style.opacity = '1';
-            }, 10);
+            reactionBlurOverlay.style.opacity = '1';
             
             messageElement.classList.add('message-selected');
-            // FIX: Set a high z-index to ensure the selected message is above the blur overlay (z-40)
-            messageElement.style.zIndex = '99'; // Set to 99
+            // Ensure the selected message has no blur and is fully opaque and on top of its siblings
+            messageElement.style.zIndex = '999'; 
+            messageElement.style.filter = 'none'; 
+            messageElement.style.opacity = '1';
             
             // Get message element's position relative to the viewport
             const rect = messageElement.getBoundingClientRect();
 
             // Set the message ID on the selector
             reactionSelector.setAttribute('data-message-id', messageId);
-            reactionSelector.classList.remove('hidden');
-
+            
             // Set disabled state for reaction buttons based on message owner
             const messageOwner = messageElement.getAttribute('data-nickname');
             const isMine = messageOwner === currentUsername;
@@ -553,18 +573,38 @@
                 // Vertical: Directly under the message bubble + 10px gap
                 const topPosition = rect.bottom + 10; 
 
-                // Apply the fixed position relative to the screen
+                // Apply the fixed position relative to the screen (POSITION BEFORE SHOWING)
                 reactionSelector.style.left = leftPosition + 'px';
                 reactionSelector.style.top = topPosition + 'px'; 
+                
+                // NOW make it visible (INSTANT SHOW)
+                reactionSelector.classList.remove('hidden');
                 
             }, 0);
         }
 
         function hideReactionSelector() {
-            // Remove Blur and Scale Effect
+            // 1. Reset the Message's Ancestor z-index AND background color
+            mainChatWrapper.style.zIndex = '10'; 
+            mainChatWrapper.style.backgroundColor = ''; // Clears the inline style, reverting to CSS class bg-white/95
+
+            // 2. Remove all blurs from messages and peripheral elements
+            document.querySelectorAll('.chat-message-left, .chat-message-right').forEach(msg => {
+                msg.style.filter = '';
+                msg.style.opacity = '';
+            });
+            chatHeader.style.filter = '';
+            chatHeader.style.opacity = '';
+            messageSection.style.filter = '';
+            messageSection.style.opacity = '';
+
+
+            // 3. Remove Blur and Scale Effect
             if (currentMessageForReaction) {
                 currentMessageForReaction.classList.remove('message-selected'); 
-                currentMessageForReaction.style.zIndex = ''; // FIX: Reset Z-index
+                currentMessageForReaction.style.zIndex = ''; // Reset Z-index
+                currentMessageForReaction.style.filter = ''; // IMPORTANT: Reset filter
+                currentMessageForReaction.style.opacity = ''; // IMPORTANT: Reset opacity
             }
             reactionBlurOverlay.style.opacity = '0'; 
             setTimeout(() => {
@@ -1173,7 +1213,8 @@
         });
         modalVerifyPasswordInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') { handleModalSave(); }
-        });
+        }
+        );
         modalUsernameInput.addEventListener('input', (e) => {
              if (isSigningUp) {
                 const sanitizedValue = e.target.value.replace(/[^a-zA-Z0-9_-]/g, '');
@@ -1235,7 +1276,7 @@
         function handlePointerDown(event) {
             if (event.type === 'mousedown' && event.button !== 0) return; 
 
-            const messageElement = event.target.closest('.flex.flex-col.p-3.rounded-xl');
+            const messageElement = event.target.closest('.chat-message-left, .chat-message-right');
             
             if (event.target.closest('.delete-btn')) {
                 return;
@@ -1295,7 +1336,7 @@
         
         // 4. Global click to hide the selector if clicking outside
         document.addEventListener('click', (event) => {
-            const clickedMessage = event.target.closest('.flex.flex-col.p-3.rounded-xl');
+            const clickedMessage = event.target.closest('.chat-message-left, .chat-message-right');
             const clickedSelector = event.target.closest('#reaction-selector');
 
             // Only close the menu if it's currently visible AND the click was outside the menu 
