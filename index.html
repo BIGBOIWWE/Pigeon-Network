@@ -26,12 +26,19 @@
         /* Message bubble styling */
         .chat-message-left, .chat-message-right {
             max-width: 80%;
-            /* Added marginBottom to transition properties for smooth collapse */
-            transition: opacity 0.3s ease, height 0.3s ease, padding 0.3s ease, margin-bottom 0.3s ease; 
+            /* Added transform and box-shadow to transition properties for smooth grow/shrink */
+            transition: opacity 0.3s ease, height 0.3s ease, padding 0.3s ease, margin-bottom 0.3s ease, transform 0.2s ease, box-shadow 0.2s ease; 
             animation: fadeIn 0.3s ease-out;
-            position: relative; /* CRITICAL: Allows absolute positioning of reactions relative to the bubble */
+            position: relative; 
         }
         
+        /* Effect for the selected message: grows slightly and has a stronger shadow */
+        .message-selected {
+            transform: scale(1.02);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.15); 
+            z-index: 10; 
+        }
+
         .chat-message-left {
             margin-right: auto;
         }
@@ -45,10 +52,18 @@
             to { opacity: 1; transform: translateY(0); }
         }
         
-        /* Modal background overlay */
+        /* Modal background overlay for sign-in/up */
         .modal-overlay {
             background-color: rgba(0, 0, 0, 0.8);
             backdrop-filter: blur(4px);
+        }
+        
+        /* NEW: Blur overlay for reaction selection */
+        .modal-overlay-blur {
+            background-color: rgba(0, 0, 0, 0.5); /* Less dark overlay for the blur effect */
+            backdrop-filter: blur(4px);
+            opacity: 0;
+            transition: opacity 0.3s ease;
         }
 
         /* Fancy Body Gradient */
@@ -60,6 +75,14 @@
         .reaction-selector {
             position: fixed; /* Fixed position for accurate screen coordinates */
             z-index: 50; 
+        }
+
+        /* NEW: Prevent text selection (highlighting) */
+        .unselectable {
+            -webkit-user-select: none; /* Safari */
+            -moz-user-select: none; /* Firefox */
+            -ms-user-select: none; /* IE10+/Edge */
+            user-select: none; /* Standard */
         }
     </style>
     <script>
@@ -97,7 +120,7 @@
             </div>
         </header>
         
-        <div id="chat-container" class="p-4 mb-6 border border-slate-300 rounded-xl bg-slate-50 shadow-inner overflow-y-auto flex-grow">
+        <div id="chat-container" class="p-4 mb-6 border border-slate-300 rounded-xl bg-slate-50 shadow-inner overflow-y-auto flex-grow unselectable">
             <div class="text-center text-slate-500 italic p-10" id="initial-message">Sign in or continue as a guest to chat.</div>
         </div>
 
@@ -115,13 +138,22 @@
         <div id="status-message" class="mt-4 text-sm text-center font-medium p-2 rounded-lg hidden flex-shrink-0"></div>
     </div>
     
+    <div id="reaction-blur-overlay" class="modal-overlay-blur fixed inset-0 z-40 hidden"></div>
+
     <div id="reaction-selector" class="reaction-selector bg-white p-2 rounded-full shadow-2xl border-4 border-pigeon-light hidden">
         <div class="flex space-x-2">
             <button data-reaction="heart" class="reaction-btn p-1 rounded-full hover:bg-slate-100 transition duration-100" title="Love"><img src="heart.png" alt="Love" class="w-8 h-8"/></button>
             <button data-reaction="bad" class="reaction-btn p-1 rounded-full hover:bg-slate-100 transition duration-100" title="Dislike"><img src="bad.png" alt="Dislike" class="w-8 h-8"/></button>
             <button data-reaction="cry" class="reaction-btn p-1 rounded-full hover:bg-slate-100 transition duration-100" title="Sad"><img src="cry.png" alt="Sad" class="w-8 h-8"/></button>
             <button data-reaction="flip" class="reaction-btn p-1 rounded-full hover:bg-slate-100 transition duration-100" title="Flip Table"><img src="flip.png" alt="Angry" class="w-8 h-8"/></button>
-            <button id="clear-reaction-btn" class="p-1 rounded-full text-slate-500 hover:text-red-500 transition duration-100" title="Close Reaction Selector">
+            
+            <button data-reaction="copy" class="reaction-btn p-1 rounded-full text-slate-500 hover:text-pigeon-dark transition duration-100" title="Copy Message">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 7v6a2 2 0 002 2h6M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-2M8 7h6M8 7V5a2 2 0 012-2h6a2 2 0 012 2v2M8 7H6M8 7v6" />
+                </svg>
+            </button>
+
+            <button data-reaction="clear" class="reaction-btn p-1 rounded-full text-slate-500 hover:text-red-500 transition duration-100" title="Clear Reaction">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -182,7 +214,7 @@
         let currentConfirmAction = null; 
         let isProcessingAction = false; 
         let tempMessageElement = null; 
-        let lastSentMessageContent = ''; // NEW: Used to confirm the *content* of the sent message
+        let lastSentMessageContent = ''; 
 
         // Reaction Variables
         let reactionTimer = null;
@@ -201,7 +233,7 @@
         const initialMessage = document.getElementById('initial-message');
         const statusMessage = document.getElementById('status-message');
         const reactionSelector = document.getElementById('reaction-selector'); 
-        const clearReactionBtn = document.getElementById('clear-reaction-btn'); // NEW: Reference to the 'X' button
+        const reactionBlurOverlay = document.getElementById('reaction-blur-overlay'); // NEW
 
         // Modal Elements (unchanged)
         const usernameModal = document.getElementById('username-modal');
@@ -461,18 +493,19 @@
             startChatPolling();
         }
         
-        // --- Reaction Handlers (UPDATED LOGIC) ---
+        // --- Reaction Handlers (UPDATED LOGIC for blur, grow, copy, and reaction state) ---
         
         function showReactionSelector(messageElement, messageId) {
             if (!currentUsername) return; 
-            
-            // Check if user is the message owner
-            const messageOwner = messageElement.getAttribute('data-nickname');
-            if (messageOwner === currentUsername) {
-                return; // User cannot react to their own message
-            }
 
             currentMessageForReaction = messageElement;
+            
+            // NEW: Apply Blur and Scale Effect
+            reactionBlurOverlay.classList.remove('hidden');
+            setTimeout(() => {
+                reactionBlurOverlay.style.opacity = '1';
+            }, 10);
+            messageElement.classList.add('message-selected');
             
             // Get message element's position relative to the viewport
             const rect = messageElement.getBoundingClientRect();
@@ -481,13 +514,37 @@
             reactionSelector.setAttribute('data-message-id', messageId);
             reactionSelector.classList.remove('hidden');
 
+            // Set disabled state for reaction buttons based on message owner
+            const messageOwner = messageElement.getAttribute('data-nickname');
+            const isMine = messageOwner === currentUsername;
+
+            reactionSelector.querySelectorAll('.reaction-btn').forEach(btn => {
+                const reactionName = btn.getAttribute('data-reaction');
+                if (reactionName === 'copy') {
+                    // Copy button is always enabled
+                    btn.disabled = false;
+                    btn.classList.remove('opacity-50', 'cursor-not-allowed');
+                } else {
+                    // Reactions and Clear button logic
+                    const hasReaction = messageElement.getAttribute('data-current-user-reaction');
+                    
+                    if (reactionName === 'clear') {
+                        // Clear button is disabled on your own message or if there is no reaction to clear
+                        btn.disabled = isMine || !hasReaction;
+                    } else {
+                        // All other reaction buttons are disabled on your own message
+                        btn.disabled = isMine;
+                    }
+                    btn.classList.toggle('opacity-50', btn.disabled);
+                    btn.classList.toggle('cursor-not-allowed', btn.disabled);
+                }
+            });
+
             // Use setTimeout(0) to ensure the element's offsetWidth is correctly calculated 
-            // after its `hidden` class is removed, allowing for proper centering.
             setTimeout(() => {
                 const selectorWidth = reactionSelector.offsetWidth;
                 
                 // Horizontal: Center of the message bubble
-                // Left edge of selector = (Message Left + Half Message Width) - Half Selector Width
                 const leftPosition = rect.left + (rect.width / 2) - (selectorWidth / 2);
                 
                 // Vertical: Directly under the message bubble + 10px gap
@@ -501,6 +558,15 @@
         }
 
         function hideReactionSelector() {
+            // NEW: Remove Blur and Scale Effect
+            if (currentMessageForReaction) {
+                currentMessageForReaction.classList.remove('message-selected'); 
+            }
+            reactionBlurOverlay.style.opacity = '0'; 
+            setTimeout(() => {
+                reactionBlurOverlay.classList.add('hidden'); 
+            }, 300); // Wait for fade transition
+
             reactionSelector.classList.add('hidden');
             currentMessageForReaction = null;
         }
@@ -572,8 +638,32 @@
         async function handleReaction(clickedReaction) {
             const messageId = reactionSelector.getAttribute('data-message-id');
             const messageElement = currentMessageForReaction; 
-            hideReactionSelector(); // Close the selector immediately
             
+            // NEW: Handle Copy Action
+            if (clickedReaction === 'copy') {
+                if (messageElement) {
+                    const messageContentDiv = messageElement.querySelector('.whitespace-pre-wrap');
+                    if (messageContentDiv) {
+                        try {
+                            await navigator.clipboard.writeText(messageContentDiv.textContent);
+                            displayStatus('Message copied to clipboard! 📋');
+                        } catch (err) {
+                            console.error('Failed to copy text: ', err);
+                            displayError('Failed to copy message to clipboard.');
+                        }
+                    }
+                }
+                hideReactionSelector();
+                return;
+            }
+            
+            hideReactionSelector(); 
+            
+            // Check if the reaction button was disabled (e.g., trying to react to own message)
+            if (reactionSelector.querySelector(`[data-reaction="${clickedReaction}"]`).disabled) {
+                return;
+            }
+
             if (!messageId || isProcessingAction) {
                 return;
             }
@@ -582,11 +672,11 @@
             const oldReaction = messageElement.getAttribute('data-current-user-reaction') || '';
 
             // 2. Determine the intended NEW state and the SERVER parameter
-            let newReaction = ''; // The new reaction state on the client ('heart', 'bad', or '')
-            let serverReaction = ''; // The reaction name to send to the server ('heart', 'bad', 'cry', 'flip', or 'clear')
+            let newReaction = ''; 
+            let serverReaction = ''; 
 
-            // Case 1: Toggle Off (clicking existing reaction)
-            if (clickedReaction === oldReaction) {
+            if (clickedReaction === 'clear' || clickedReaction === oldReaction) {
+                // Case 1: Clear button clicked OR Toggle Off (clicking existing reaction)
                 newReaction = ''; 
                 serverReaction = 'clear'; 
             } else {
@@ -611,13 +701,13 @@
             formData.append('action', 'REACT_MESSAGE'); 
             formData.append('id', messageId);
             formData.append('nickname', currentUsername);
-            formData.append('reaction', serverReaction); // Send the determined server parameter
+            formData.append('reaction', serverReaction); 
 
             try {
                 await apiRequest('POST', formData);
-                fetchMessages(); // Success: Force a fetch to confirm the state
+                fetchMessages(); 
             } catch (error) {
-                fetchMessages(); // Failure: Force a fetch to revert the optimistic change.
+                fetchMessages(); 
             } finally {
                 isProcessingAction = false;
                 disableChatActions(false);
@@ -643,9 +733,6 @@
             messageElement.setAttribute('data-message-id', msg.id); 
             messageElement.setAttribute('data-nickname', msg.nickname); 
             
-            // NOTE: Since the server does not send the user's specific reaction, 
-            // we initialize this to empty on render. It is then tracked client-side.
-            // If the message is replaced/updated by a server poll, this is reset.
             messageElement.setAttribute('data-current-user-reaction', ''); 
             
             let reactions = {};
@@ -692,7 +779,7 @@
                             ${isMine ? 'hover:bg-red-600' : 'bg-white/20 hover:bg-red-500'}"
                             title="Delete message"
                         >
-                            <img src="delete-xxl.png" alt="Delete" class="w-4 h-4" />
+                            <img src="delete-xxl.png" alt="Delete" class="w-4 h-4" /> 
                         </button>
                     ` : ''}
                 </div>
@@ -720,6 +807,16 @@
                  return;
             }
 
+            // NEW: Direct transition fix: Check if the confirmed message is present and remove the temporary one immediately.
+            const confirmedMessage = newMessages.find(msg => 
+                msg.message.trim() === lastSentMessageContent.trim() && String(msg.nickname) === currentUsername
+            );
+
+            if (tempMessageElement && confirmedMessage) {
+                removeTempMessage();
+                lastSentMessageContent = '';
+            }
+
             if (initialMessage.parentNode && !initialMessage.classList.contains('hidden')) {
                 initialMessage.classList.add('hidden');
             }
@@ -739,13 +836,6 @@
                 let currentUserReactionState = existingEl ? existingEl.getAttribute('data-current-user-reaction') : '';
 
                 if (existingEl) {
-                    // NEW: Check if the current message matches the last sent content and remove temp message if so
-                    if (tempMessageElement && msg.message.trim() === lastSentMessageContent.trim()) {
-                        removeTempMessage();
-                        lastSentMessageContent = '';
-                        // Removed: displayStatus('Message sent successfully!');
-                    }
-                    
                     const updatedEl = createMessageElement(msg);
                     
                     if (existingEl.innerHTML !== updatedEl.innerHTML) {
@@ -886,14 +976,12 @@
             disableChatActions(true);
             stopChatPolling();
 
-            // NEW: Immediately clear the confirmation prompt
-            displayStatus('Deletion in progress...'); 
-
             const formData = new FormData();
             formData.append('action', 'DELETE_MESSAGE'); 
             formData.append('id', messageId);
             formData.append('nickname', currentUsername); 
 
+            // Visually remove the message instantly (fading)
             messageElement.style.opacity = '0'; 
             messageElement.style.height = '0';
             messageElement.style.padding = '0';
@@ -903,9 +991,10 @@
 
             try {
                 await apiRequest('POST', formData);
-                // Removed: displayStatus(response.message || 'Message deleted.');
+                displayStatus('Message deleted successfully.'); // Show success status
             } catch (error) {
-                displayError('Failed to delete message. Message restored: ' + error.message);
+                // If deletion fails, force a fetch to restore the message and show error
+                displayError('Failed to delete message. Message may be restored on next poll: ' + error.message);
                 setTimeout(fetchMessages, 100); 
             } finally {
                 isProcessingAction = false;
@@ -931,6 +1020,16 @@
 
             document.getElementById('confirm-delete-btn').onclick = () => {
                 document.getElementById('confirm-delete-btn').disabled = true;
+                
+                // NEW: Hide the prompt immediately upon confirmation
+                statusMessage.classList.add('hidden'); 
+
+                // NEW: Gray out the delete button image until it fully deletes (or disappears with the message)
+                const deleteImg = messageElement.querySelector('.delete-btn img');
+                if (deleteImg) {
+                    deleteImg.classList.add('grayscale', 'opacity-50');
+                }
+
                 handleDeleteMessage(messageId, messageElement);
             };
 
@@ -956,15 +1055,13 @@
             disableChatActions(true);
 
             removeTempMessage(); 
-            
-            // Store original message content before clearing the input
+            renderTempMessage(message);
             const originalMessage = messageInput.value;
-            lastSentMessageContent = originalMessage.trim(); 
             messageInput.value = '';
 
-            renderTempMessage(originalMessage);
             showSendingState();
-            
+            lastSentMessageContent = originalMessage;
+
             const formData = new FormData();
             formData.append('action', 'SEND'); 
             formData.append('nickname', currentUsername);
@@ -1127,9 +1224,6 @@
         // Listener to hide the reaction selector when the chat container is scrolled
         chatContainer.addEventListener('scroll', hideReactionSelector);
         
-        // NEW: Listener for the 'X' button to only close the selector
-        clearReactionBtn.addEventListener('click', hideReactionSelector);
-
         // 1. Long Press / Touch Start Listener
         chatContainer.addEventListener('mousedown', handlePointerDown);
         chatContainer.addEventListener('touchstart', handlePointerDown);
@@ -1139,11 +1233,6 @@
 
             const messageElement = event.target.closest('.flex.flex-col.p-3.rounded-xl');
             
-            // Allow clicks on reaction item to prevent triggering long press timer
-            if (event.target.closest('.reaction-item')) {
-                return;
-            }
-
             if (event.target.closest('.delete-btn')) {
                 return;
             }
