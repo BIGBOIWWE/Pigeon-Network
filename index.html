@@ -866,8 +866,10 @@
                 return;
             }
 
-            // OLD: Capture scroll state BEFORE any DOM changes that affect height
-            // const isScrolledToBottom = chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight < 50;
+            // NEW FIX: 1. Capture user scroll position before DOM changes
+            // Use a tolerance of 50px to determine if the user is 'near' the bottom.
+            const scrollTolerance = 50; 
+            const isUserNearBottom = chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight < scrollTolerance;
             
             // Direct transition fix: Check if the confirmed message is present and remove the temporary one immediately.
             const confirmedMessage = newMessages.find(msg => 
@@ -950,9 +952,14 @@
 
             lastMessageCount = newMessages.length;
             
-            // FIX: Only scroll if new content was added to prevent jarring scroll-down during a poll.
-            if (isNewMessageAdded) {
-                chatContainer.scrollTop = chatContainer.scrollHeight;
+            // NEW FIX: 2. Only scroll if a new message was added AND the user was already near the bottom.
+            if (isNewMessageAdded && isUserNearBottom) {
+                // Use a short delay (e.g., 10ms) to ensure the browser has fully completed
+                // the layout calculations for the newly inserted message's transition/fade-in
+                // and that the final accurate scrollHeight is calculated.
+                setTimeout(() => {
+                    chatContainer.scrollTop = chatContainer.scrollHeight;
+                }, 10);
             }
         }
         
