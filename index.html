@@ -58,9 +58,9 @@
             backdrop-filter: blur(4px);
         }
         
-        /* NEW: Reaction overlay - backdrop-filter: blur(4px); removed to keep the BODY background sharp */
+        /* NEW: Reaction overlay - less dark overlay for the dimming effect */
         .modal-overlay-blur {
-            background-color: rgba(0, 0, 0, 0.5); /* Less dark overlay for the dimming effect */
+            background-color: rgba(0, 0, 0, 0.5); 
             opacity: 0;
         }
 
@@ -151,7 +151,7 @@
                 </svg>
             </button>
 
-            <button data-reaction="clear" class="reaction-btn p-0.5 rounded-full text-slate-500 hover:text-red-500 transition duration-100" title="Clear Reaction">
+            <button id="close-reaction-menu-btn" class="reaction-btn p-0.5 rounded-full text-slate-500 hover:text-red-500 transition duration-100" title="Close Menu">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -213,6 +213,7 @@
         let isProcessingAction = false; 
         let tempMessageElement = null; 
         let lastSentMessageContent = ''; 
+        let hasInitialScrollHappened = false; // NEW: Flag to track initial scroll
 
         // Reaction Variables
         let reactionTimer = null;
@@ -493,7 +494,7 @@
             startChatPolling();
         }
         
-        // --- Reaction Handlers (CRITICAL UPDATE FOR BLUR FIX) ---
+        // --- Reaction Handlers (UPDATED FOR CENTERING AND HIDING EMOJI BUTTONS ON OWN MESSAGES) ---
         
         function showReactionSelector(messageElement, messageId) {
             if (!currentUsername) return; 
@@ -537,39 +538,64 @@
             // Set the message ID on the selector
             reactionSelector.setAttribute('data-message-id', messageId);
             
-            // Set disabled state for reaction buttons based on message owner
+            // Determine message owner
             const messageOwner = messageElement.getAttribute('data-nickname');
             const isMine = messageOwner === currentUsername;
 
+            // --- Button Filtering Logic ---
             reactionSelector.querySelectorAll('.reaction-btn').forEach(btn => {
                 const reactionName = btn.getAttribute('data-reaction');
+                const isEmojiReaction = reactionName && reactionName !== 'copy';
+
+                if (isMine && isEmojiReaction) {
+                    // Hide emoji buttons for own messages
+                    btn.classList.add('hidden');
+                } else {
+                    // Show all buttons for others' messages, and Copy/Close for own messages
+                    btn.classList.remove('hidden');
+                }
+
+                // Disabling logic (Copy is always enabled, emojis are disabled on your own message)
                 if (reactionName === 'copy') {
-                    // Copy button is always enabled
                     btn.disabled = false;
                     btn.classList.remove('opacity-50', 'cursor-not-allowed');
-                } else {
-                    // Reactions and Clear button logic
-                    const hasReaction = messageElement.getAttribute('data-current-user-reaction');
-                    
-                    if (reactionName === 'clear') {
-                        // Clear button is disabled on your own message or if there is no reaction to clear
-                        btn.disabled = isMine || !hasReaction;
-                    } else {
-                        // All other reaction buttons are disabled on your own message
-                        btn.disabled = isMine;
-                    }
-                    btn.classList.toggle('opacity-50', btn.disabled);
-                    btn.classList.toggle('cursor-not-allowed', btn.disabled);
+                } else if (isEmojiReaction) {
+                    btn.disabled = isMine; // Disable the actual reaction button if it's yours
+                    btn.classList.toggle('opacity-50', btn.disabled && !isMine); // Only grey out if for other's message, not mine (since it's hidden)
                 }
             });
 
             // Use setTimeout(0) to ensure the element's offsetWidth is correctly calculated 
             setTimeout(() => {
                 const selectorWidth = reactionSelector.offsetWidth;
+                const messageWidth = rect.width;
+                let leftPosition;
                 
-                // Horizontal: Center of the message bubble
-                const leftPosition = rect.left + (rect.width / 2) - (selectorWidth / 2);
+                // --- Positioning Logic (UPDATED FOR CENTERING) ---
+                if (isMine) {
+                    // Centered alignment for own messages: 
+                    // Start of message + (Message Width / 2) - (Selector Width / 2)
+                    leftPosition = rect.left + (messageWidth / 2) - (selectorWidth / 2);
+                } else {
+                    // Left-aligned message: align selector's left edge to message bubble's left edge
+                    leftPosition = rect.left;
+                }
                 
+                // --- Horizontal Boundary Check (NEW FIX to prevent horizontal scrollbar) ---
+                const viewportWidth = window.innerWidth;
+                const margin = 10; // A small margin from the edge
+                
+                // 1. Check right boundary: If the right edge of the selector is past the viewport edge
+                if (leftPosition + selectorWidth > viewportWidth - margin) {
+                    leftPosition = viewportWidth - selectorWidth - margin;
+                }
+                
+                // 2. Check left boundary: Ensure it doesn't go off the left edge
+                if (leftPosition < margin) {
+                    leftPosition = margin;
+                }
+                // --- END Horizontal Boundary Check ---
+
                 // Vertical: Directly under the message bubble + 10px gap
                 const topPosition = rect.bottom + 10; 
 
@@ -680,6 +706,7 @@
         }
 
         async function handleReaction(clickedReaction) {
+            
             const messageId = reactionSelector.getAttribute('data-message-id');
             const messageElement = currentMessageForReaction; 
             
@@ -704,7 +731,8 @@
             hideReactionSelector(); 
             
             // Check if the reaction button was disabled (e.g., trying to react to own message)
-            if (reactionSelector.querySelector(`[data-reaction="${clickedReaction}"]`).disabled) {
+            const reactionButton = reactionSelector.querySelector(`[data-reaction="${clickedReaction}"]`);
+            if (reactionButton && reactionButton.disabled) {
                 return;
             }
 
@@ -719,8 +747,8 @@
             let newReaction = ''; 
             let serverReaction = ''; 
 
-            if (clickedReaction === 'clear' || clickedReaction === oldReaction) {
-                // Case 1: Clear button clicked OR Toggle Off (clicking existing reaction)
+            if (clickedReaction === oldReaction) {
+                // Case 1: Toggle Off (clicking existing reaction)
                 newReaction = ''; 
                 serverReaction = 'clear'; 
             } else {
@@ -730,7 +758,7 @@
             }
 
             if (!oldReaction && newReaction === '') {
-                // Edge Case: Clicking 'clear' when there's no reaction. NO-OP.
+                // Edge Case: Clicking 'clear' when there's no reaction. NO-OP. 
                 return;
             }
 
@@ -838,19 +866,9 @@
                 return;
             }
 
-            const isScrolledToBottom = chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight < 50;
+            // OLD: Capture scroll state BEFORE any DOM changes that affect height
+            // const isScrolledToBottom = chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight < 50;
             
-            if (newMessages.length === 0) {
-                 if (lastMessageCount > 0 || chatContainer.children.length > 1) { 
-                    chatContainer.innerHTML = '';
-                    initialMessage.textContent = 'The chat is currently empty. Be the first to send a message!';
-                    initialMessage.classList.remove('hidden');
-                    chatContainer.appendChild(initialMessage);
-                 }
-                 lastMessageCount = 0;
-                 return;
-            }
-
             // Direct transition fix: Check if the confirmed message is present and remove the temporary one immediately.
             const confirmedMessage = newMessages.find(msg => 
                 msg.message.trim() === lastSentMessageContent.trim() && String(msg.nickname) === currentUsername
@@ -890,8 +908,10 @@
 
                         existingEl.replaceWith(updatedEl);
                         
+                        // Only scroll if we were at the bottom and a non-content update happened 
+                        // (which should be rare/unnecessary with the isNewMessageAdded rule below)
                         if (isAtBottom) {
-                            chatContainer.scrollTop = chatContainer.scrollHeight;
+                            // chatContainer.scrollTop = chatContainer.scrollHeight; 
                         }
                     }
                 } else if (!existingIds.has(messageIdStr)) {
@@ -930,7 +950,8 @@
 
             lastMessageCount = newMessages.length;
             
-            if (isNewMessageAdded || isScrolledToBottom) {
+            // FIX: Only scroll if new content was added to prevent jarring scroll-down during a poll.
+            if (isNewMessageAdded) {
                 chatContainer.scrollTop = chatContainer.scrollHeight;
             }
         }
@@ -1005,7 +1026,17 @@
 
             try {
                 const response = await apiRequest('GET');
+                
+                // NEW: Check if this is the initial load before rendering
+                const isInitialLoad = !hasInitialScrollHappened;
+                
                 renderMessages(response.data);
+                
+                // NEW: Explicitly scroll to bottom on initial load
+                if (isInitialLoad && response.data.length > 0) {
+                    chatContainer.scrollTop = chatContainer.scrollHeight;
+                    hasInitialScrollHappened = true;
+                }
             } catch (error) {
                 console.error('Pigeon Poll Failed:', error.message);
                 if (chatContainer.children.length === 0 || (chatContainer.children.length === 1 && chatContainer.contains(initialMessage))) {
@@ -1269,6 +1300,13 @@
         // Listener to hide the reaction selector when the chat container is scrolled
         chatContainer.addEventListener('scroll', hideReactionSelector);
         
+        // Listener for the new dedicated Close button
+        document.getElementById('close-reaction-menu-btn').addEventListener('click', (event) => {
+            event.stopPropagation(); // Prevent the click from bubbling up and re-showing the menu
+            hideReactionSelector();
+        });
+
+
         // 1. Long Press / Touch Start Listener
         chatContainer.addEventListener('mousedown', handlePointerDown);
         chatContainer.addEventListener('touchstart', handlePointerDown);
@@ -1325,12 +1363,15 @@
             document.removeEventListener('touchend', handlePointerUp);
         }
 
-        // 3. Reaction Button Click Listener
+        // 3. Reaction Button Click Listener (only for actual reactions and copy)
         reactionSelector.addEventListener('click', (event) => {
             const reactionButton = event.target.closest('.reaction-btn');
             if (reactionButton) {
                 const reactionName = reactionButton.getAttribute('data-reaction');
-                handleReaction(reactionName);
+                // Only call handleReaction if it has a reaction attribute (excluding the new close button)
+                if (reactionName) {
+                    handleReaction(reactionName);
+                }
             }
         });
         
