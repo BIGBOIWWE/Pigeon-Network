@@ -74,7 +74,7 @@
         /* Custom style for reaction selection bar */
         .reaction-selector {
             position: fixed; /* Fixed position for accurate screen coordinates */
-            z-index: 50; 
+            z-index: 100; /* Increased z-index to ensure it's on top of everything */
         }
 
         /* NEW: Prevent text selection (highlighting) */
@@ -508,7 +508,7 @@
             
             messageElement.classList.add('message-selected');
             // FIX: Set a high z-index to ensure the selected message is above the blur overlay (z-40)
-            messageElement.style.zIndex = '41'; 
+            messageElement.style.zIndex = '99'; // Set to 99
             
             // Get message element's position relative to the viewport
             const rect = messageElement.getBoundingClientRect();
