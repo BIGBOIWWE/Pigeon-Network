@@ -82,6 +82,16 @@
             -ms-user-select: none; /* IE10+/Edge */
             user-select: none; /* Standard */
         }
+    
+        /* Ensure long words wrap and don't overlap the delete button */
+        .chat-message-left .whitespace-pre-wrap, .chat-message-right .whitespace-pre-wrap {
+            flex: 1 1 auto;
+            min-width: 0; /* Allow the flex child to shrink below its content width */
+            overflow-wrap: anywhere; /* Break long words when necessary */
+            word-break: break-word;
+            hyphens: auto;
+        }
+
     </style>
     <script>
         tailwind.config = {
@@ -862,7 +872,7 @@
                 </div>
                 
                 <div class="flex items-start justify-between">
-                    <div class="whitespace-pre-wrap">${safeMessage}</div>
+                    <div class="whitespace-pre-wrap flex-1 min-w-0">${safeMessage}</div>
                     ${canDelete ? `
                         <button 
                             data-id="${msg.id}" 
@@ -1018,7 +1028,7 @@
                 </div>
                 
                 <div class="flex items-start justify-between">
-                    <div class="whitespace-pre-wrap">${safeMessage}</div>
+                    <div class="whitespace-pre-wrap flex-1 min-w-0">${safeMessage}</div>
                 </div>
             `;
 
