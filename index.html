@@ -132,16 +132,55 @@
             <div class="text-center text-slate-500 italic p-10" id="initial-message">Sign in or continue as a guest to chat.</div>
         </div>
 
+<div id="image-preview"
+     class="mb-2 flex items-center space-x-3"
+     style="display:none;">
+    <div class="relative">
+        <img id="image-preview-img"
+             class="h-16 w-16 object-cover rounded-lg border border-slate-300"
+             alt="Selected image preview" />
+        <button id="image-preview-remove"
+                class="absolute -top-2 -right-2 h-5 w-5 rounded-full bg-red-500 text-white text-xs font-bold flex items-center justify-center shadow-md hover:bg-red-600"
+                type="button">
+            ×
+        </button>
+    </div>
+    <div class="text-xs text-slate-600 truncate max-w-[200px]"
+         id="image-preview-name"></div>
+</div>
+
+
         <div id="message-section" class="flex space-x-3 hidden flex-shrink-0 transition-all duration-300">
-            <input type="text" id="message-input" placeholder="Type your message..." class="flex-grow p-3 border border-slate-300 rounded-lg focus:ring-pigeon-main focus:border-pigeon-main transition duration-150 shadow-md disabled:bg-slate-50">
-            <button id="send-button" class="w-[6rem] inline-flex items-center justify-center py-3 bg-pigeon-main text-white font-bold rounded-lg hover:bg-pigeon-dark transition duration-150 shadow-lg disabled:bg-slate-400 disabled:cursor-not-allowed">
-                <span id="send-text">Send</span>
-                <svg id="loading-spinner" class="animate-spin h-5 w-5 text-white hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-            </button>
-        </div>
+    <!-- Image upload trigger -->
+    <button id="image-button"
+        class="px-3 py-3 bg-slate-200 text-slate-700 font-medium rounded-lg hover:bg-slate-300 transition duration-150 shadow-md flex items-center justify-center"
+        title="Attach an image">
+        📷
+    </button>
+
+    <input type="text" id="message-input" placeholder="Type your message..."
+        class="flex-grow p-3 border border-slate-300 rounded-lg focus:ring-pigeon-main focus:border-pigeon-main transition duration-150 shadow-md disabled:bg-slate-50">
+
+    <button id="send-button"
+        class="w-[6rem] inline-flex items-center justify-center py-3 bg-pigeon-main text-white font-bold rounded-lg hover:bg-pigeon-dark transition duration-150 shadow-lg disabled:bg-slate-400 disabled:cursor-not-allowed">
+        <span id="send-text">Send</span>
+        <svg id="loading-spinner" class="animate-spin h-5 w-5 text-white hidden"
+            xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+            </path>
+        </svg>
+    </button>
+</div>
+
+<!-- Hidden file input for gallery selection -->
+<input
+    type="file"
+    id="image-input"
+    accept="image/*"
+    class="hidden">
+
 
         <div id="status-message" class="mt-4 text-sm text-center font-medium p-2 rounded-lg hidden flex-shrink-0"></div>
     </div>
@@ -231,6 +270,10 @@
         let currentMessageForReaction = null; 
         
         // DOM Elements
+        const imagePreview        = document.getElementById('image-preview');
+        const imagePreviewImg     = document.getElementById('image-preview-img');
+        const imagePreviewName    = document.getElementById('image-preview-name');
+        const imagePreviewRemove  = document.getElementById('image-preview-remove');
         const mainChatWrapper = document.getElementById('main-chat-wrapper'); 
         const chatHeader = document.querySelector('header'); // Reference to the header
         const currentUsernameDisplay = document.getElementById('current-username-display');
@@ -245,6 +288,9 @@
         const statusMessage = document.getElementById('status-message');
         const reactionSelector = document.getElementById('reaction-selector'); 
         const reactionBlurOverlay = document.getElementById('reaction-blur-overlay'); 
+        const imageButton = document.getElementById('image-button');
+        const imageInput  = document.getElementById('image-input');
+
 
         // Modal Elements (unchanged)
         const usernameModal = document.getElementById('username-modal');
@@ -295,6 +341,29 @@
                 sendButton.classList.remove('disabled:bg-slate-400', 'disabled:cursor-not-allowed');
             }
         }
+        
+        function clearImageSelection() {
+    if (imageInput) {
+        imageInput.value = '';
+    }
+    if (imagePreviewImg) {
+        imagePreviewImg.src = '';
+    }
+    if (imagePreviewName) {
+        imagePreviewName.textContent = '';
+    }
+    if (imagePreview) {
+        imagePreview.style.display = 'none';
+    }
+    
+}
+
+if (imagePreviewRemove) {
+    imagePreviewRemove.addEventListener('click', (e) => {
+        e.preventDefault();
+        clearImageSelection();
+    });
+}
         
         function displayError(msg) {
             console.error('Error:', msg);
@@ -806,6 +875,7 @@
 
             try {
                 await apiRequest('POST', formData);
+                clearImageSelection();   // <— new line
                 fetchMessages(); 
             } catch (error) {
                 fetchMessages(); 
@@ -817,77 +887,112 @@
         }
         
         // --- Chat Functions (updated createMessageElement for user reaction state) ---
+function createMessageElement(msg) {
+    const isMine = msg.nickname === currentUsername; 
+    const canDelete = isMine || currentUsername === ADMIN_USERNAME; 
+    
+    const messageElement = document.createElement('div');
+    
+    const alignmentClass = isMine ? 'chat-message-right' : 'chat-message-left';
+    const colorClass = isMine 
+        ? 'bg-pigeon-main text-white shadow-xl' 
+        : 'bg-white shadow-lg text-slate-800 border border-slate-100'; 
+    const nicknameColor = isMine ? 'text-white/80' : 'text-pigeon-dark';
+    
+    const rawMessage = (msg.message || '');
+    const safeMessage = rawMessage
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
 
-        function createMessageElement(msg) {
-            const isMine = msg.nickname === currentUsername; 
-            const canDelete = isMine || currentUsername === ADMIN_USERNAME; 
-            
-            const messageElement = document.createElement('div');
-            
-            const alignmentClass = isMine ? 'chat-message-right' : 'chat-message-left';
-            const colorClass = isMine ? 'bg-pigeon-main text-white shadow-xl' : 'bg-white shadow-lg text-slate-800 border border-slate-100'; 
-            const nicknameColor = isMine ? 'text-white/80' : 'text-pigeon-dark';
-            
-            const safeMessage = msg.message.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            
-            messageElement.className = `flex flex-col p-3 rounded-xl mb-4 ${alignmentClass} ${colorClass} group`; 
-            messageElement.setAttribute('data-message-id', msg.id); 
-            messageElement.setAttribute('data-nickname', msg.nickname); 
-            
-            messageElement.setAttribute('data-current-user-reaction', ''); 
-            
-            let reactions = {};
-            if (msg.reactions) {
-                try {
-                    reactions = JSON.parse(msg.reactions);
-                } catch (e) {
-                    console.error("Failed to parse reactions:", msg.reactions);
-                }
-            }
-
-            let reactionsHtml = '';
-            const reactionOrder = ['heart', 'bad', 'cry', 'flip'];
-            
-            const reactionKeys = reactionOrder.filter(key => reactions[key] > 0);
-
-            if (reactionKeys.length > 0) {
-                reactionsHtml = `
-                    <div class="reactions-display absolute ${isMine ? 'bottom-[-15px] left-2' : 'bottom-[-15px] right-2'} flex items-center bg-white border border-slate-200 rounded-full shadow-md px-1 py-0.5 text-xs font-semibold">
-                `;
-                reactionKeys.forEach(reaction => {
-                    reactionsHtml += `
-                        <div class="reaction-item flex items-center ml-1" data-reaction-name="${reaction}">
-                            <img src="${reaction}.png" alt="${reaction}" class="w-4 h-4"/>
-                            <span class="ml-0.5 text-slate-700">${reactions[reaction]}</span>
-                        </div>
-                    `;
-                });
-                reactionsHtml += `</div>`;
-            }
-
-            messageElement.innerHTML = `
-                <div class="flex items-baseline space-x-2 mb-1">
-                    <span class="font-bold text-sm ${nicknameColor}">${msg.nickname}</span>
-                    <span class="text-xs ${isMine ? 'text-white/50' : 'text-slate-400'}">${msg.timestamp}</span>
-                </div>
-                
-                <div class="flex items-start justify-between">
-                    <div class="whitespace-pre-wrap flex-1 min-w-0">${safeMessage}</div>
-                    ${canDelete ? `
-                        <button 
-                            data-id="${msg.id}" 
-                            class="delete-btn ml-3 flex-shrink-0 p-1 rounded-full transition duration-150 
-                            ${isMine ? 'hover:bg-red-600' : 'bg-white/20 hover:bg-red-500'}"
-                            title="Delete message"
-                        >
-                            <img src="delete-xxl.png" alt="Delete" class="w-4 h-4" /> 
-                        </button>
-                    ` : ''}
-                </div>
-                ${reactionsHtml}
-            `;
-            return messageElement;
+    messageElement.className = `flex flex-col p-3 rounded-xl mb-4 ${alignmentClass} ${colorClass} group`; 
+    messageElement.setAttribute('data-message-id', msg.id); 
+    messageElement.setAttribute('data-nickname', msg.nickname); 
+    messageElement.setAttribute('data-current-user-reaction', ''); 
+    
+    // --- Reactions ---
+    let reactions = {};
+    if (msg.reactions) {
+        try {
+            reactions = JSON.parse(msg.reactions);
+        } catch (e) {
+            console.error("Failed to parse reactions:", msg.reactions);
         }
+    }
+
+    let reactionsHtml = '';
+    const reactionOrder = ['heart', 'bad', 'cry', 'flip'];
+    const reactionKeys = reactionOrder.filter(key => reactions[key] > 0);
+
+    if (reactionKeys.length > 0) {
+        reactionsHtml = `
+            <div class="reactions-display absolute ${isMine ? 'bottom-[-15px] left-2' : 'bottom-[-15px] right-2'} flex items-center bg-white border border-slate-200 rounded-full shadow-md px-1 py-0.5 text-xs font-semibold">
+        `;
+        reactionKeys.forEach(reaction => {
+            reactionsHtml += `
+                <div class="reaction-item flex items-center ml-1" data-reaction-name="${reaction}">
+                    <img src="${reaction}.png" alt="${reaction}" class="w-4 h-4"/>
+                    <span class="ml-0.5 text-slate-700">${reactions[reaction]}</span>
+                </div>
+            `;
+        });
+        reactionsHtml += `</div>`;
+    }
+
+    // --- Build content: text + optional image ---
+    let contentHtml = '';
+
+    // text
+    if (safeMessage) {
+        contentHtml += `
+            <div class="whitespace-pre-wrap flex-1 min-w-0">${safeMessage}</div>
+        `;
+    }
+
+    // image (using the Drive thumbnail URL)
+    if (msg.imageUrl) {
+        contentHtml += `
+            <div class="mt-2">
+                <img
+                    src="${msg.imageUrl}"
+                    alt="Shared image"
+                    class="max-h-64 max-w-full rounded-lg border border-slate-200 object-contain"
+                />
+                <div class="mt-1 text-xs">
+                    <a href="${msg.imageUrl}" target="_blank" class="text-blue-500 underline">
+                        Open full size
+                    </a>
+                </div>
+            </div>
+        `;
+    }
+
+    messageElement.innerHTML = `
+        <div class="flex items-baseline space-x-2 mb-1">
+            <span class="font-bold text-sm ${nicknameColor}">${msg.nickname}</span>
+            <span class="text-xs ${isMine ? 'text-white/50' : 'text-slate-400'}">${msg.timestamp}</span>
+        </div>
+        
+        <div class="flex items-start justify-between">
+            <div class="flex-1 min-w-0">
+                ${contentHtml || '<div class="italic opacity-80">[empty]</div>'}
+            </div>
+            ${canDelete ? `
+                <button 
+                    data-id="${msg.id}" 
+                    class="delete-btn ml-3 flex-shrink-0 p-1 rounded-full transition duration-150 
+                    ${isMine ? 'hover:bg-red-600' : 'bg-white/20 hover:bg-red-500'}"
+                    title="Delete message"
+                >
+                    <img src="delete-xxl.png" alt="Delete" class="w-4 h-4" /> 
+                </button>
+            ` : ''}
+        </div>
+        ${reactionsHtml}
+    `;
+
+    return messageElement;
+}
 
         function renderMessages(newMessages) {
             if (isProcessingAction) {
@@ -1139,49 +1244,185 @@
         }
 
 
-        async function sendMessage() {
-            const message = messageInput.value.trim();
-            if (!message || !currentUsername) {  
-                 displayError('Message content is required, and you must be signed in or a guest to send messages.');
-                 return;
-            }
+        // REPLACE your existing sendMessage with this:
+async function sendMessage() {
+    const message = messageInput.value.trim();
+    const imageFile = imageInput.files[0];  // ← this is the selected file
 
-            if (isProcessingAction) {
-                displayError('Please wait for the previous action to complete.');
-                return;
-            }
+    if (!currentUsername) {
+        displayError('You must be signed in or a guest to send messages.');
+        return;
+    }
 
-            isProcessingAction = true;
-            disableChatActions(true);
+    if (!message && !imageFile) {
+        displayError('Type a message or attach an image before sending.');
+        return;
+    }
 
-            removeTempMessage(); 
-            renderTempMessage(message);
-            const originalMessage = messageInput.value;
-            messageInput.value = '';
+    if (isProcessingAction) {
+        displayError('Please wait for the previous action to complete.');
+        return;
+    }
 
-            showSendingState();
-            lastSentMessageContent = originalMessage;
+    // Route to the right sender
+    if (imageFile) {
+        await sendImageMessage(imageFile, message);
+    } else {
+        await sendTextMessage(message);
+    }
+}
 
-            const formData = new FormData();
-            formData.append('action', 'SEND'); 
-            formData.append('nickname', currentUsername);
-            formData.append('message', originalMessage);
+// NEW: pure text send (basically your original body)
+async function sendTextMessage(message) {
+    isProcessingAction = true;
+    disableChatActions(true);
 
-            try {
-                await apiRequest('POST', formData);
-                fetchMessages(); 
-            } catch (error) {
-                removeTempMessage();
-                messageInput.value = originalMessage; 
-                displayError('Failed to send message: ' + error.message);
-                lastSentMessageContent = '';
-            } finally {
-                isProcessingAction = false;
-                hideSendingState();
-                disableChatActions(false);
-                messageInput.focus();
-            }
+    removeTempMessage(); 
+    renderTempMessage(message);
+    const originalMessage = messageInput.value;
+    messageInput.value = '';
+
+    showSendingState();
+    lastSentMessageContent = originalMessage;
+
+    const formData = new FormData();
+    formData.append('action', 'SEND'); 
+    formData.append('nickname', currentUsername);
+    formData.append('message', originalMessage);
+
+    try {
+        await apiRequest('POST', formData);
+        fetchMessages(); 
+    } catch (error) {
+        removeTempMessage();
+        messageInput.value = originalMessage; 
+        displayError('Failed to send message: ' + error.message);
+        lastSentMessageContent = '';
+    } finally {
+        isProcessingAction = false;
+        hideSendingState();
+        disableChatActions(false);
+        messageInput.focus();
+    }
+}
+
+// NEW: image + optional caption
+async function sendImageMessage(file, caption) {
+    if (!file || !file.type.startsWith('image/')) {
+        displayError('Please select a valid image file.');
+        return;
+    }
+
+    if (!currentUsername) {
+        displayError('You must be signed in or a guest to send images.');
+        return;
+    }
+
+    if (isProcessingAction) {
+        displayError('Please wait for the previous action to complete.');
+        return;
+    }
+
+    isProcessingAction = true;
+    disableChatActions(true);
+
+    // Build the temporary message text:
+    // - If caption exists: "caption\n[Image]"
+    // - If no caption: "[Image]"
+    const originalCaption = caption || '';
+    const tempDisplayText =
+        originalCaption.trim() !== ''
+            ? originalCaption + '\n[Image]'
+            : '[Image]';
+
+    // Remove any existing temp message bubble and render a new one
+    removeTempMessage();
+    renderTempMessage(tempDisplayText);
+
+    // Clear text box for user while sending
+    messageInput.value = '';
+    showSendingState();
+    lastSentMessageContent = originalCaption;
+
+    try {
+        // 1) Read original file as DataURL
+        const dataUrl = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = e => resolve(e.target.result);
+            reader.onerror = () => reject(new Error('Failed to read image file.'));
+            reader.readAsDataURL(file);
+        });
+
+        // 2) Load into Image object
+        const img = await new Promise((resolve, reject) => {
+            const image = new Image();
+            image.onload = () => resolve(image);
+            image.onerror = () => reject(new Error('Failed to load image for compression.'));
+            image.src = dataUrl;
+        });
+
+        // 3) Compress via canvas (max dimension 1280px)
+        const MAX_DIMENSION = 1280;
+        let { width, height } = img;
+
+        if (width > height && width > MAX_DIMENSION) {
+            height = Math.round((height * MAX_DIMENSION) / width);
+            width = MAX_DIMENSION;
+        } else if (height >= width && height > MAX_DIMENSION) {
+            width = Math.round((width * MAX_DIMENSION) / height);
+            height = MAX_DIMENSION;
         }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // 4) Export as JPEG with reasonable quality
+        const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.7);
+        const base64Data = compressedDataUrl.split(',')[1]; // strip "data:image/jpeg;base64,"
+
+        // 5) Build form data for SEND_IMAGE
+        const formData = new FormData();
+        formData.append('action', 'SEND_IMAGE');
+        formData.append('nickname', currentUsername);
+        formData.append('message', originalCaption);
+        formData.append('filename', file.name || 'upload.jpg');
+        formData.append('mimeType', 'image/jpeg');
+        formData.append('imageData', base64Data);
+
+        await apiRequest('POST', formData);
+
+        // Clear selection + preview after successful send
+        if (typeof clearImageSelection === 'function') {
+            clearImageSelection();
+        } else if (imageInput) {
+            imageInput.value = '';
+        }
+
+        // Reload messages (real bubble with the actual image will appear)
+        fetchMessages();
+    } catch (error) {
+        // Remove temp bubble and restore caption if something failed
+        removeTempMessage();
+        messageInput.value = originalCaption;
+        displayError('Failed to upload image: ' + error.message);
+        lastSentMessageContent = '';
+
+        // Also clear selection in case of error
+        if (typeof clearImageSelection === 'function') {
+            clearImageSelection();
+        } else if (imageInput) {
+            imageInput.value = '';
+        }
+    } finally {
+        isProcessingAction = false;
+        hideSendingState();
+        disableChatActions(false);
+        messageInput.focus();
+    }
+}
         
         function updateUIForUsername() {
             const isAuth = !!currentUsername; 
@@ -1241,10 +1482,68 @@
             }
         });
         
+        imagePreviewRemove.addEventListener('click', (e) => {
+    e.preventDefault();
+    clearImageSelection();
+});
+        
+        imageButton.addEventListener('click', () => {
+    if (!currentUsername) {
+        displayError('You must be signed in or a guest to send images.');
+        return;
+    }
+
+    // Reset last selection so the user can pick the same image again if they want
+    imageInput.value = '';
+
+    // Make EXTRA sure we’re in “pick from gallery/images” mode
+    imageInput.accept = 'image/*';
+    imageInput.removeAttribute('capture'); // important for not forcing camera
+
+    // This opens the gallery / image picker on phones
+    imageInput.click();
+});
+
+        
         guestContinueButton.addEventListener('click', () => {
             const guestUsername = generateGuestId();
             handleSuccessfulAuth(guestUsername, true, `You are now chatting as Guest: ${guestUsername}.`);
         });
+
+if (imageInput) {
+    imageInput.addEventListener('change', () => {
+        const file = imageInput.files[0];
+
+        if (!file) {
+            clearImageSelection();
+            return;
+        }
+
+        if (!file.type.startsWith('image/')) {
+            displayError('Please select an image file.');
+            clearImageSelection();
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            if (imagePreviewImg) {
+                imagePreviewImg.src = e.target.result;
+            }
+            if (imagePreviewName) {
+                imagePreviewName.textContent = file.name;
+            }
+            if (imagePreview) {
+                imagePreview.style.display = 'flex';
+            }
+        };
+        reader.onerror = () => {
+            displayError('Failed to read image file.');
+            clearImageSelection();
+        };
+        reader.readAsDataURL(file);
+    });
+}
 
         modalToggleLink.addEventListener('click', (e) => {
             e.preventDefault();
@@ -1292,14 +1591,17 @@
              }
         });
 
+sendButton.addEventListener('click', () => {
+    hideImagePreviewVisual();   // hide preview instantly
+    sendMessage();
+});
 
-        sendButton.addEventListener('click', sendMessage);
-
-        messageInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter' && !sendButton.disabled) {
-                sendMessage();
-            }
-        });
+messageInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter' && !sendButton.disabled) {
+        hideImagePreviewVisual();  // hide preview on Enter send too
+        sendMessage();
+    }
+});
         
         // Event Delegation for Delete Buttons
         chatContainer.addEventListener('click', (event) => {
@@ -1379,6 +1681,12 @@
             document.removeEventListener('mousemove', handlePointerMove);
             document.removeEventListener('touchmove', handlePointerMove);
         }
+        
+        function hideImagePreviewVisual() {
+    if (imagePreview) {
+        imagePreview.style.display = 'none';
+    }
+}
         
         function handlePointerMove(event) {
             // Cancel the long-press if the pointer moves too much
