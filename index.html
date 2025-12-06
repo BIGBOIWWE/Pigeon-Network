@@ -150,19 +150,24 @@
 </div>
 
 
-        <div id="message-section" class="flex space-x-3 hidden flex-shrink-0 transition-all duration-300">
+        <div id="message-section" class="flex items-center space-x-2 hidden flex-shrink-0 transition-all duration-300 w-full">
     <!-- Image upload trigger -->
     <button id="image-button"
-        class="px-3 py-3 bg-slate-200 text-slate-700 font-medium rounded-lg hover:bg-slate-300 transition duration-150 shadow-md flex items-center justify-center"
+        class="p-3 bg-slate-200 text-slate-700 font-medium rounded-lg flex-shrink-0
+               hover:bg-slate-300 transition duration-150 shadow-md flex items-center justify-center"
         title="Attach an image">
-        📷
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6"
+             fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" 
+                  d="M3 7h4l2-3h6l2 3h4v13H3V7zm9 3a4 4 0 100 8 4 4 0 000-8z"/>
+        </svg>
     </button>
 
     <input type="text" id="message-input" placeholder="Type your message..."
-        class="flex-grow p-3 border border-slate-300 rounded-lg focus:ring-pigeon-main focus:border-pigeon-main transition duration-150 shadow-md disabled:bg-slate-50">
+        class="flex-grow min-w-0 p-3 border border-slate-300 rounded-lg focus:ring-pigeon-main focus:border-pigeon-main transition duration-150 shadow-md disabled:bg-slate-50">
 
     <button id="send-button"
-        class="w-[6rem] inline-flex items-center justify-center py-3 bg-pigeon-main text-white font-bold rounded-lg hover:bg-pigeon-dark transition duration-150 shadow-lg disabled:bg-slate-400 disabled:cursor-not-allowed">
+        class="px-4 flex-shrink-0 inline-flex items-center justify-center py-3 bg-pigeon-main text-white font-bold rounded-lg hover:bg-pigeon-dark transition duration-150 shadow-lg disabled:bg-slate-400 disabled:cursor-not-allowed">
         <span id="send-text">Send</span>
         <svg id="loading-spinner" class="animate-spin h-5 w-5 text-white hidden"
             xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
